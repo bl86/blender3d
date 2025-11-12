@@ -195,24 +195,28 @@ def create_golden_material(logo):
 
 
 def setup_camera(logo):
-    """Setup camera with tracking"""
+    """Setup camera with tracking - positioned to frame logo perfectly"""
     print("  Setting up camera...")
 
-    bpy.ops.object.camera_add(location=(0, -18, 2))  # Closer to logo
+    # Position camera to see logo centered and close at the end
+    bpy.ops.object.camera_add(location=(0, -10, 1))
     camera = bpy.context.active_object
     camera.name = "MainCamera"
-    camera.data.lens = 35  # Wider lens to fill frame better
+    camera.data.lens = 50  # Standard lens for good perspective
     camera.data.dof.use_dof = True
     camera.data.dof.aperture_fstop = 2.8
-    camera.data.dof.focus_distance = 18  # Adjusted for new camera position
+    camera.data.dof.focus_distance = 10
 
-    # Track logo
+    # Track logo so it's always centered
     constraint = camera.constraints.new(type='TRACK_TO')
     constraint.target = logo
     constraint.track_axis = 'TRACK_NEGATIVE_Z'
     constraint.up_axis = 'UP_Y'
 
     bpy.context.scene.camera = camera
+
+    # Set initial frame to see final position (for better preview)
+    bpy.context.scene.frame_set(250)  # Near end where logo is close
 
     # Align viewport to camera view (so user sees render view)
     for area in bpy.context.screen.areas:
@@ -223,7 +227,10 @@ def setup_camera(logo):
                     space.region_3d.view_perspective = 'CAMERA'
                     break
 
-    print("  ✓ Camera configured and aligned to viewport")
+    # Reset to frame 1 for animation start
+    bpy.context.scene.frame_set(1)
+
+    print("  ✓ Camera configured, centered on logo")
     return camera
 
 
@@ -232,11 +239,11 @@ def animate_logo(logo):
     print("  Animating logo...")
 
     # Start far
-    logo.location = (0, 15, 0)
+    logo.location = (0, 12, 0)
     logo.keyframe_insert(data_path="location", frame=1)
 
-    # End near
-    logo.location = (0, -5, 0)
+    # End near - centered in frame
+    logo.location = (0, -2, 0)
     logo.keyframe_insert(data_path="location", frame=300)
 
     # No rotation - keep logo facing camera
@@ -258,10 +265,11 @@ def create_fire_simulation(logo):
     """Create fire simulation around logo"""
     print("  Creating fire simulation...")
 
-    # Domain
-    bpy.ops.mesh.primitive_cube_add(size=12, location=(0, 5, 0))
+    # Domain - covers logo animation path (y: 12 to -2 = 14 units + margin)
+    bpy.ops.mesh.primitive_cube_add(size=18, location=(0, 5, 0))
     domain = bpy.context.active_object
     domain.name = "FireDomain"
+    domain.display_type = 'WIRE'  # Show as wireframe in viewport
 
     # Add fluid modifier
     bpy.ops.object.modifier_add(type='FLUID')
@@ -270,7 +278,7 @@ def create_fire_simulation(logo):
 
     # Configure domain
     domain_settings.domain_type = 'GAS'
-    domain_settings.resolution_max = 128  # Lower for speed
+    domain_settings.resolution_max = 256  # Higher resolution for better fire visibility
 
     # Noise settings
     try:
@@ -301,9 +309,9 @@ def create_fire_simulation(logo):
     except AttributeError:
         pass  # vorticity might not be available
 
-    # Cache
+    # Cache - only until fire ends to save baking time
     domain_settings.cache_frame_start = 1
-    domain_settings.cache_frame_end = 300
+    domain_settings.cache_frame_end = 180  # Fire ends at 150, add buffer
 
     # Emitter - duplicate logo shape so fire matches logo outline
     bpy.ops.object.select_all(action='DESELECT')
@@ -343,14 +351,14 @@ def create_fire_simulation(logo):
     except AttributeError:
         pass  # temperature not available
 
-    # Animate fire fade
+    # Animate fire fade - fire disappears quickly to save render time
     try:
         flow.density = 1.0
         emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=1)
         flow.density = 1.0
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=170)
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=120)
         flow.density = 0.0
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=200)
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=150)
     except (AttributeError, TypeError):
         # Keyframing might not work, try simple approach
         pass
@@ -397,9 +405,9 @@ def create_fire_simulation(logo):
     links.new(density_attr.outputs['Fac'], volume.inputs['Density'])
     links.new(volume.outputs['Volume'], output.inputs['Volume'])
 
-    # Adjust volume properties
-    volume.inputs['Density'].default_value = 1.0
-    volume.inputs['Emission Strength'].default_value = 5.0
+    # Adjust volume properties for strong, visible fire
+    volume.inputs['Density'].default_value = 2.0  # Increased for visibility
+    volume.inputs['Emission Strength'].default_value = 10.0  # Much brighter fire
     volume.inputs['Blackbody Intensity'].default_value = 1.0
     volume.inputs['Blackbody Tint'].default_value = (1.0, 0.8, 0.5, 1.0)
 
@@ -408,7 +416,11 @@ def create_fire_simulation(logo):
     else:
         domain.data.materials.append(mat)
 
-    print("  ✓ Fire simulation created with Principled Volume shader")
+    # Make sure domain is visible in render (not hidden)
+    domain.hide_render = False
+    domain.hide_viewport = False
+
+    print("  ✓ Fire simulation created - domain visible, emitter hidden")
     return domain, emitter
 
 
@@ -555,12 +567,12 @@ def configure_render():
     scene.render.image_settings.color_depth = '8'
     scene.render.image_settings.compression = 15
 
-    # Volume settings for fire
+    # Volume settings for fire - optimized for visibility
     scene.render.use_high_quality_normals = True
     scene.cycles.volume_bounces = 2
-    scene.cycles.volume_preview_step_rate = 2
-    scene.cycles.volume_step_rate = 2
-    scene.cycles.volume_max_steps = 1024
+    scene.cycles.volume_preview_step_rate = 1  # Lower = better quality in viewport
+    scene.cycles.volume_step_rate = 0.5  # Lower = finer steps = more visible fire
+    scene.cycles.volume_max_steps = 2048  # More steps for complex fire
 
     print("  ✓ Render configured with RTX 3090 optimization")
 
