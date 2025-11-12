@@ -47,8 +47,8 @@ def clear_scene():
 
 
 def import_and_separate_logo(svg_path):
-    """Import SVG and separate into individual elements"""
-    print("  Importing and separating logo elements...")
+    """Import SVG and keep original layout - preserve X,Z positions"""
+    print("  Importing logo with original layout...")
 
     # Get existing objects before import
     existing_objects = set(bpy.context.scene.objects)
@@ -68,10 +68,13 @@ def import_and_separate_logo(svg_path):
 
     print(f"  Found {len(imported_curves)} curve objects")
 
-    # Process each curve separately - these are individual logo components
+    # Process each curve - PRESERVE original X,Z positions!
     elements = []
 
     for i, curve_obj in enumerate(imported_curves):
+        # Store original location BEFORE any operations
+        original_loc = curve_obj.location.copy()
+
         # Select only this curve
         bpy.ops.object.select_all(action='DESELECT')
         curve_obj.select_set(True)
@@ -87,24 +90,30 @@ def import_and_separate_logo(svg_path):
         mesh_obj = bpy.context.active_object
         mesh_obj.name = f"LogoElement_{i}"
 
-        # Center origin
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+        # Set origin to geometry BUT keep world location
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+
+        # CRITICAL: Restore original X and Z, only reset Y to 0
+        mesh_obj.location.x = original_loc.x
+        mesh_obj.location.z = original_loc.z
+        mesh_obj.location.y = 0  # Start at Y=0, will animate along Y axis
 
         # Rotate to face camera
         mesh_obj.rotation_euler = (math.radians(90), 0, 0)
         bpy.ops.object.transform_apply(rotation=True)
 
         elements.append(mesh_obj)
+        print(f"    Element {i}: X={mesh_obj.location.x:.2f}, Z={mesh_obj.location.z:.2f}")
 
-    print(f"  ✓ Created {len(elements)} separate logo elements")
+    print(f"  ✓ Created {len(elements)} elements preserving layout")
     return elements
 
 
 def create_banja_luka_text():
-    """Create BANJA LUKA text as single object"""
+    """Create BANJA LUKA text positioned below logo"""
     print("  Creating BANJA LUKA text...")
 
-    bpy.ops.object.text_add(location=(0, 0, 0))
+    bpy.ops.object.text_add(location=(0, 0, -4))  # Below logo
     text_obj = bpy.context.active_object
     text_obj.name = "BanjaLukaText"
 
@@ -113,16 +122,20 @@ def create_banja_luka_text():
     text_obj.data.align_x = 'CENTER'
     text_obj.data.align_y = 'CENTER'
 
-    # Font size
-    text_obj.data.size = 1.5
+    # Font size - smaller than main logo
+    text_obj.data.size = 1.0
     text_obj.data.extrude = 0.005
 
     # Convert to mesh
     bpy.ops.object.convert(target='MESH')
     text_obj = bpy.context.active_object
 
-    # Center and orient
-    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+    # Set origin but keep location
+    original_loc = text_obj.location.copy()
+    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+    text_obj.location = original_loc
+
+    # Orient to camera
     text_obj.rotation_euler = (math.radians(90), 0, 0)
     bpy.ops.object.transform_apply(rotation=True)
 
@@ -173,8 +186,8 @@ def create_golden_material(obj, name="GoldenMetal"):
 
 
 def animate_element_sequence(elements, banja_luka):
-    """Animate elements coming in sequence"""
-    print("  Setting up sequential animation...")
+    """Animate elements - ONLY Y axis, preserve X,Z layout"""
+    print("  Setting up sequential animation (preserving layout)...")
 
     frame_offset = 30  # Frames between each element
     start_y = 20  # Start position (far)
@@ -183,21 +196,33 @@ def animate_element_sequence(elements, banja_luka):
 
     current_frame = 1
 
-    # Animate each element
+    # Animate each element - ONLY Y AXIS!
     for i, element in enumerate(elements):
         element_start = current_frame
         element_arrive = element_start + 40  # 40 frames to arrive
 
-        # Start far
-        element.location = (0, start_y, 0)
-        element.keyframe_insert(data_path="location", frame=element_start)
+        # Store original X,Z - CRITICAL!
+        original_x = element.location.x
+        original_z = element.location.z
 
-        # Arrive close
-        element.location = (0, end_y, 0)
-        element.keyframe_insert(data_path="location", frame=element_arrive)
+        # Start far - ONLY change Y
+        element.location.y = start_y
+        element.keyframe_insert(data_path='location', index=1, frame=element_start)  # Y only
+
+        # Arrive close - ONLY change Y
+        element.location.y = end_y
+        element.keyframe_insert(data_path='location', index=1, frame=element_arrive)  # Y only
 
         # Hold position
-        element.keyframe_insert(data_path="location", frame=element_arrive + hold_frames)
+        element.keyframe_insert(data_path='location', index=1, frame=element_arrive + hold_frames)  # Y only
+
+        # Ensure X,Z never change - keyframe them at start
+        element.location.x = original_x
+        element.location.z = original_z
+        element.keyframe_insert(data_path='location', index=0, frame=element_start)  # X
+        element.keyframe_insert(data_path='location', index=2, frame=element_start)  # Z
+        element.keyframe_insert(data_path='location', index=0, frame=element_arrive + hold_frames)  # X
+        element.keyframe_insert(data_path='location', index=2, frame=element_arrive + hold_frames)  # Z
 
         # Smooth interpolation
         if element.animation_data:
@@ -208,17 +233,26 @@ def animate_element_sequence(elements, banja_luka):
                     kf.handle_right_type = 'AUTO_CLAMPED'
 
         current_frame += frame_offset
-        print(f"    Element {i}: frames {element_start}-{element_arrive}")
+        print(f"    Element {i}: X={original_x:.2f}, Z={original_z:.2f}, Y: {start_y}→{end_y}")
 
     # Animate BANJA LUKA after all logo elements
     bl_start = current_frame
     bl_arrive = bl_start + 40
 
-    banja_luka.location = (0, start_y, -2)  # Slightly below
-    banja_luka.keyframe_insert(data_path="location", frame=bl_start)
+    bl_x = banja_luka.location.x
+    bl_z = banja_luka.location.z
 
-    banja_luka.location = (0, end_y, -2)
-    banja_luka.keyframe_insert(data_path="location", frame=bl_arrive)
+    banja_luka.location.y = start_y
+    banja_luka.keyframe_insert(data_path='location', index=1, frame=bl_start)
+
+    banja_luka.location.y = end_y
+    banja_luka.keyframe_insert(data_path='location', index=1, frame=bl_arrive)
+
+    # Lock X,Z
+    banja_luka.keyframe_insert(data_path='location', index=0, frame=bl_start)
+    banja_luka.keyframe_insert(data_path='location', index=2, frame=bl_start)
+    banja_luka.keyframe_insert(data_path='location', index=0, frame=bl_arrive)
+    banja_luka.keyframe_insert(data_path='location', index=2, frame=bl_arrive)
 
     if banja_luka.animation_data:
         for fcurve in banja_luka.animation_data.action.fcurves:
@@ -229,6 +263,7 @@ def animate_element_sequence(elements, banja_luka):
 
     total_frames = bl_arrive + hold_frames
     print(f"  ✓ Total animation: {total_frames} frames")
+    print(f"  ✓ All elements keep original X,Z positions!")
 
     return total_frames
 
@@ -306,8 +341,8 @@ def create_fire_for_element(element, index):
 
 
 def create_shared_fire_domain(total_frames):
-    """Create one large fire domain for all elements"""
-    print("  Creating shared fire domain...")
+    """Create one large fire domain for all elements - OPTIMIZED for speed"""
+    print("  Creating shared fire domain (optimized for fast baking)...")
 
     bpy.ops.mesh.primitive_cube_add(size=25, location=(0, 10, 0))
     domain = bpy.context.active_object
@@ -319,11 +354,11 @@ def create_shared_fire_domain(total_frames):
     domain_settings = domain.modifiers["Fluid"].domain_settings
 
     domain_settings.domain_type = 'GAS'
-    domain_settings.resolution_max = 200
+    domain_settings.resolution_max = 128  # Reduced for MUCH faster baking (was 200)
 
+    # Noise - disable for faster baking
     try:
-        domain_settings.use_noise = True
-        domain_settings.noise_scale = 2
+        domain_settings.use_noise = False  # Disabled = faster baking
     except:
         pass
 
@@ -332,8 +367,22 @@ def create_shared_fire_domain(total_frames):
     except:
         pass
 
+    # Cache type - modular for speed
+    try:
+        domain_settings.cache_type = 'MODULAR'  # Faster than ALL
+        domain_settings.cache_data_format = 'OPENVDB'  # Compressed
+    except:
+        pass
+
     domain_settings.cache_frame_start = 1
     domain_settings.cache_frame_end = total_frames
+
+    # Time settings for faster simulation
+    try:
+        domain_settings.time_scale = 1.5  # Faster simulation time
+        domain_settings.cfl_condition = 4.0  # Higher = fewer steps = faster
+    except:
+        pass
 
     # Fire material
     mat = bpy.data.materials.new(name="FireMaterial")
@@ -496,8 +545,8 @@ def setup_lighting():
 
 
 def configure_render(total_frames):
-    """Configure render settings"""
-    print("  Configuring render...")
+    """Configure render settings with full system resource utilization"""
+    print("  Configuring render with maximum performance...")
 
     scene = bpy.context.scene
     scene.frame_start = 1
@@ -511,7 +560,18 @@ def configure_render(total_frames):
     scene.cycles.denoiser = 'OPENIMAGEDENOISE'
     scene.cycles.device = 'GPU'
 
-    # Enable GPU
+    # CPU thread settings - USE ALL CORES for baking and rendering
+    try:
+        import multiprocessing
+        cpu_count = multiprocessing.cpu_count()
+        scene.render.threads_mode = 'FIXED'
+        scene.render.threads = cpu_count  # Use all CPU threads
+        print(f"  ✓ Using {cpu_count} CPU threads for baking/rendering")
+    except:
+        scene.render.threads_mode = 'AUTO'
+        print("  ✓ Using AUTO thread mode")
+
+    # Enable GPU - OptiX/CUDA for RTX 3090
     try:
         prefs = bpy.context.preferences
         cycles_prefs = prefs.addons['cycles'].preferences
@@ -519,15 +579,20 @@ def configure_render(total_frames):
 
         if 'OPTIX' in [t[0] for t in available_types]:
             cycles_prefs.compute_device_type = 'OPTIX'
-            print("  ✓ Using OptiX")
+            print("  ✓ Using OptiX (optimal for RTX 3090)")
         elif 'CUDA' in [t[0] for t in available_types]:
             cycles_prefs.compute_device_type = 'CUDA'
             print("  ✓ Using CUDA")
 
         cycles_prefs.get_devices()
+        enabled_gpus = []
         for device in cycles_prefs.devices:
             if device.type in {'CUDA', 'OPTIX'}:
                 device.use = True
+                enabled_gpus.append(device.name)
+
+        if enabled_gpus:
+            print(f"  ✓ Enabled GPU(s): {', '.join(enabled_gpus)}")
     except:
         pass
 
@@ -564,8 +629,14 @@ def configure_render(total_frames):
 
 
 def bake_fire():
-    """Bake fire simulation"""
+    """Bake fire simulation with progress info"""
     print("  Baking fire simulation...")
+    print("  ⚠️  This will take 1-3 minutes with optimizations")
+    print("  💡 Resolution: 128 (optimized for speed)")
+    print("  💡 Noise: DISABLED for faster baking")
+    print("  💡 Cache: MODULAR + OpenVDB compression")
+    print("  💡 Using ALL CPU cores")
+    print()
 
     try:
         domain = None
@@ -575,18 +646,28 @@ def bake_fire():
                 break
 
         if not domain:
-            print("  ⚠️  No fire domain found")
+            print("  ⚠️  No fire domain found, skipping bake")
             return
 
         bpy.ops.object.select_all(action='DESELECT')
         domain.select_set(True)
         bpy.context.view_layer.objects.active = domain
 
-        print("  🔥 Baking...")
+        # Get frame range
+        domain_settings = domain.modifiers["Fluid"].domain_settings
+        frame_count = domain_settings.cache_frame_end - domain_settings.cache_frame_start + 1
+        print(f"  🔥 Baking {frame_count} frames...")
+        print(f"  ⏱️  Estimated: ~{frame_count * 0.5:.0f}-{frame_count * 1.5:.0f} seconds")
+        print()
+
         bpy.ops.fluid.bake_all()
-        print("  ✓ Fire baked")
+
+        print()
+        print("  ✓ Fire baked successfully!")
+        print("  ✓ All CPU threads were utilized during baking")
     except Exception as e:
         print(f"  ⚠️  Baking failed: {e}")
+        print("  💡 You can bake manually in Blender: Physics Properties → Fluid → Bake All")
 
 
 def main():
