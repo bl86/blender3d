@@ -41,37 +41,107 @@ class LogoAnimationSetup:
                 bpy.data.images.remove(block)
 
     def import_svg_logo(self):
-        """Import SVG logo and convert to mesh"""
-        # Import SVG
-        bpy.ops.import_curve.svg(filepath=self.svg_path)
+        """Import SVG logo and convert to mesh with robust error handling"""
+        import os
 
-        # Get imported curves
-        imported_curves = [obj for obj in bpy.context.selected_objects]
+        print(f"  Importing SVG from: {self.svg_path}")
 
-        # Join all curves
-        if len(imported_curves) > 1:
+        # Verify SVG file exists
+        if not os.path.exists(self.svg_path):
+            raise FileNotFoundError(f"SVG file not found: {self.svg_path}")
+
+        # Get existing objects before import
+        existing_objects = set(bpy.context.scene.objects)
+
+        # Deselect all first
+        bpy.ops.object.select_all(action='DESELECT')
+
+        try:
+            # Import SVG
+            result = bpy.ops.import_curve.svg(filepath=self.svg_path)
+
+            if result != {'FINISHED'}:
+                print(f"  Warning: SVG import returned {result}, trying alternative method...")
+                raise Exception("SVG import did not complete successfully")
+
+            # Get newly imported objects
+            new_objects = set(bpy.context.scene.objects) - existing_objects
+            imported_curves = [obj for obj in new_objects if obj.type == 'CURVE']
+
+            if not imported_curves:
+                print("  Warning: No curves found after SVG import, creating fallback text logo...")
+                raise Exception("No curves imported from SVG")
+
+            print(f"  Successfully imported {len(imported_curves)} curve object(s)")
+
+            # Select all imported curves
+            for obj in imported_curves:
+                obj.select_set(True)
+
+            # Set first as active
             bpy.context.view_layer.objects.active = imported_curves[0]
-            bpy.ops.object.join()
 
-        logo_curve = bpy.context.active_object
+            # Join all curves if multiple
+            if len(imported_curves) > 1:
+                print(f"  Joining {len(imported_curves)} curves into one object...")
+                bpy.ops.object.join()
+
+            logo_curve = bpy.context.active_object
+
+        except Exception as e:
+            print(f"  SVG import failed: {str(e)}")
+            print("  Creating fallback 3D text logo...")
+
+            # Create fallback text logo
+            bpy.ops.object.text_add(location=(0, 0, 0))
+            logo_curve = bpy.context.active_object
+            logo_curve.data.body = "ALTER"
+            logo_curve.data.align_x = 'CENTER'
+            logo_curve.data.align_y = 'CENTER'
+            logo_curve.data.size = 1.0
+
+            # Add some depth
+            logo_curve.data.extrude = 0.2
+            logo_curve.data.bevel_depth = 0.05
+            logo_curve.data.bevel_resolution = 3
+
+        # Verify we have an object
+        if logo_curve is None:
+            raise Exception("Failed to create logo object")
+
+        # Name the object
         logo_curve.name = "AlterLogo"
+        print(f"  Logo object created: {logo_curve.name}")
 
-        # Add extrusion to give it depth
-        logo_curve.data.extrude = 0.15
-        logo_curve.data.bevel_depth = 0.02
-        logo_curve.data.bevel_resolution = 4
+        # Add extrusion and bevel for depth (skip if already done in fallback)
+        if logo_curve.type == 'CURVE' and logo_curve.data.body != "ALTER":
+            try:
+                logo_curve.data.extrude = 0.15
+                logo_curve.data.bevel_depth = 0.02
+                logo_curve.data.bevel_resolution = 4
+                print("  Added extrusion and bevel")
+            except:
+                print("  Note: Could not add extrusion (may already be set)")
 
         # Convert to mesh for better material control
+        print("  Converting to mesh...")
         bpy.ops.object.convert(target='MESH')
 
+        # Update reference (convert changes the object)
+        logo_mesh = bpy.context.active_object
+        logo_mesh.name = "AlterLogo"
+
         # Center and scale
+        print("  Centering and scaling...")
         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
-        logo_curve.location = (0, 0, 0)
-        logo_curve.scale = (2.5, 2.5, 2.5)
+        logo_mesh.location = (0, 0, 0)
+        logo_mesh.scale = (2.5, 2.5, 2.5)
         bpy.ops.object.transform_apply(scale=True)
 
-        self.logo_obj = logo_curve
-        return logo_curve
+        self.logo_obj = logo_mesh
+        print(f"  ✓ Logo ready: {logo_mesh.name}")
+
+        return logo_mesh
 
     def create_golden_material(self):
         """Create photorealistic golden material with reflections"""
@@ -534,66 +604,101 @@ class LogoAnimationSetup:
         scene.render.filepath = os.path.join(self.output_path, 'alter_logo_animation_')
 
     def setup_animation(self):
-        """Main setup function to create entire animation"""
+        """Main setup function to create entire animation with robust error handling"""
         print("=" * 60)
         print("Starting Alter Logo Animation Setup")
         print("=" * 60)
+        print()
 
-        # Clear scene
-        print("\n[1/10] Clearing scene...")
-        self.clear_scene()
+        try:
+            # Clear scene
+            print("[1/10] Clearing scene...")
+            self.clear_scene()
+            print("  ✓ Scene cleared")
 
-        # Import logo
-        print("[2/10] Importing SVG logo...")
-        self.import_svg_logo()
+            # Import logo
+            print("\n[2/10] Importing SVG logo...")
+            self.import_svg_logo()
+            if not self.logo_obj:
+                raise Exception("Failed to create logo object")
 
-        # Create material
-        print("[3/10] Creating golden material...")
-        self.create_golden_material()
+            # Create material
+            print("\n[3/10] Creating golden material...")
+            self.create_golden_material()
+            print("  ✓ Material created")
 
-        # Setup camera
-        print("[4/10] Setting up camera...")
-        self.setup_camera()
+            # Setup camera
+            print("\n[4/10] Setting up camera...")
+            self.setup_camera()
+            print("  ✓ Camera configured")
 
-        # Animate logo
-        print("[5/10] Animating logo movement...")
-        self.animate_logo()
+            # Animate logo
+            print("\n[5/10] Animating logo movement...")
+            self.animate_logo()
+            print("  ✓ Animation keyframes set")
 
-        # Create fire
-        print("[6/10] Creating fire simulation...")
-        self.create_fire_simulation()
+            # Create fire
+            print("\n[6/10] Creating fire simulation...")
+            try:
+                self.create_fire_simulation()
+                print("  ✓ Fire simulation created")
+            except Exception as e:
+                print(f"  ⚠ Fire simulation skipped (non-critical): {str(e)}")
+                print("  Animation will continue without fire effect")
 
-        # Setup lighting
-        print("[7/10] Setting up lighting...")
-        self.setup_lighting()
+            # Setup lighting
+            print("\n[7/10] Setting up lighting...")
+            self.setup_lighting()
+            print("  ✓ Lighting setup complete")
 
-        # Setup compositing
-        print("[8/10] Configuring compositing...")
-        self.setup_compositing()
+            # Setup compositing
+            print("\n[8/10] Configuring compositing...")
+            try:
+                self.setup_compositing()
+                print("  ✓ Compositing configured")
+            except Exception as e:
+                print(f"  ⚠ Compositing setup failed (non-critical): {str(e)}")
 
-        # Configure render
-        print("[9/10] Configuring render settings...")
-        self.configure_render_settings()
+            # Configure render
+            print("\n[9/10] Configuring render settings...")
+            self.configure_render_settings()
+            print("  ✓ Render settings applied")
 
-        # Save file
-        print("[10/10] Saving blend file...")
-        blend_path = os.path.join(
-            os.path.dirname(self.svg_path),
-            "alter_logo_animation.blend"
-        )
-        bpy.ops.wm.save_as_mainfile(filepath=blend_path)
+            # Save file
+            print("\n[10/10] Saving blend file...")
+            blend_path = os.path.join(
+                os.path.dirname(self.svg_path),
+                "alter_logo_animation.blend"
+            )
+            bpy.ops.wm.save_as_mainfile(filepath=blend_path)
+            print(f"  ✓ Saved to: {blend_path}")
 
-        print("\n" + "=" * 60)
-        print("Animation Setup Complete!")
-        print("=" * 60)
-        print(f"\nBlend file saved: {blend_path}")
-        print(f"Total frames: {self.total_frames}")
-        print(f"Fire fade ends at frame: {self.fire_end_frame}")
-        print(f"\nTo render:")
-        print(f"  blender -b {blend_path} -a")
-        print(f"\nOr open in Blender GUI:")
-        print(f"  blender {blend_path}")
-        print("=" * 60)
+            print("\n" + "=" * 60)
+            print("✓ Animation Setup Complete!")
+            print("=" * 60)
+            print(f"\nBlend file: {blend_path}")
+            print(f"Total frames: {self.total_frames}")
+            print(f"Fire fade ends at frame: {self.fire_end_frame}")
+            print(f"Resolution: 1920x1080")
+            print(f"FPS: 30")
+            print(f"\nTo render:")
+            print(f"  • Open in Blender: blender {blend_path}")
+            print(f"  • Or render: blender -b {blend_path} -a")
+            print("=" * 60)
+
+        except Exception as e:
+            print("\n" + "=" * 60)
+            print("✗ SETUP FAILED")
+            print("=" * 60)
+            print(f"\nError: {str(e)}")
+            print("\nPlease check:")
+            print("  • alter.svg exists in project folder")
+            print("  • Blender version is 3.0 or higher")
+            print("  • You have write permissions")
+            print()
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 def main():

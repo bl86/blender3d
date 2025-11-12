@@ -54,8 +54,27 @@ def main():
     print(" " * 20 + "ALTER LOGO ANIMATION")
     print("=" * 70)
     print()
-    print("🔍 Looking for Blender...")
 
+    # Check for alter.svg first
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    svg_path = os.path.join(script_dir, 'alter.svg')
+
+    print("🔍 Checking for alter.svg...")
+    if not os.path.exists(svg_path):
+        print()
+        print("❌ ERROR: alter.svg not found!")
+        print()
+        print(f"Expected location: {svg_path}")
+        print()
+        print("Please make sure alter.svg is in the same folder as this script.")
+        print()
+        input("Press Enter to exit...")
+        return 1
+
+    print(f"✓ Found alter.svg: {svg_path}")
+    print()
+
+    print("🔍 Looking for Blender...")
     blender = find_blender()
 
     if not blender:
