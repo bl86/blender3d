@@ -32,9 +32,24 @@ This project contains a complete Blender animation setup featuring:
 - **RAM**: 8GB minimum, 16GB+ recommended
 - **OS**: Windows 10/11, Linux, or macOS
 
-## Quick Start
+## 🎬 SIMPLEST WAY - Just Double-Click!
 
-### 🐍 Python-Only Workflow (Cross-Platform - Simplest!)
+### ⭐ **Absolute Easiest** (No Commands, No Typing!)
+
+**Windows/Mac/Linux:**
+1. **Double-click** `GO.py`
+2. Wait ~45 minutes
+3. Done! Check `output/` folder
+
+**Want Options?** Double-click `start.py` for interactive menu.
+
+**📖 Full guide:** [START.md](START.md)
+
+---
+
+## Quick Start (Command Line)
+
+### 🐍 Python Workflow (For Terminal Users)
 
 **One Command - Does Everything:**
 ```bash
