@@ -37,9 +37,17 @@ This project contains a complete Blender animation setup featuring:
 ### ⭐ **Absolute Easiest** (No Commands, No Typing!)
 
 **Windows/Mac/Linux:**
-1. **Double-click** `GO.py`
-2. Wait ~45 minutes
-3. Done! Check `output/` folder
+1. Make sure `alter.svg` is in the project folder
+2. **Double-click** `GO.py`
+3. Wait ~1-2 minutes
+4. Done! Open `alter_logo_fire_animation.blend` in Blender
+
+**What you get:**
+- ✨ Golden metallic ALTER logo (from your exact SVG)
+- 🔥 Realistic fire simulation (fades at frame 200)
+- 📹 Professional camera tracking
+- 💡 3-point lighting setup
+- 🎬 300 frames (10 seconds at 30 fps)
 
 **Want Options?** Double-click `start.py` for interactive menu.
 
@@ -51,19 +59,27 @@ This project contains a complete Blender animation setup featuring:
 
 ### 🐍 Python Workflow (For Terminal Users)
 
-**One Command - Does Everything:**
+**⭐ Fastest - Generate Scene Only (1-2 min):**
 ```bash
+blender --background --python ALTER_LOGO_COMPLETE.py
+```
+↳ Creates complete scene with exact SVG logo and fire simulation
+
+**In Blender GUI:**
+1. Open Blender
+2. Go to **Scripting** tab
+3. Click **Open** → Select `ALTER_LOGO_COMPLETE.py`
+4. Click **Run Script** (or Alt+P)
+
+**Full Render Pipeline:**
+```bash
+# Generate + render animation (~45 min)
 blender --background --python make_animation.py
-```
-↳ Generates scene + renders animation (~45 min)
 
-**Quick Preview (10 min):**
-```bash
+# Quick preview (10 min)
 blender --background --python make_animation.py -- --quick
-```
 
-**With Video File:**
-```bash
+# With video file
 blender --background --python make_animation.py -- --production --video
 ```
 
@@ -99,11 +115,11 @@ scripts\setup_scene.bat
 
 **2. Preview in Blender**
 ```cmd
-"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe" alter_logo_animation.blend
-```
-Or if Blender is in PATH:
-```cmd
-blender alter_logo_animation.blend
+:: For ALTER_LOGO_COMPLETE.py generated scene:
+blender alter_logo_fire_animation.blend
+
+:: Or using full path:
+"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" alter_logo_fire_animation.blend
 ```
 
 **3. Render Animation**
@@ -136,7 +152,8 @@ chmod +x scripts/*.sh
 
 **2. Preview in Blender**
 ```bash
-blender alter_logo_animation.blend
+# For ALTER_LOGO_COMPLETE.py generated scene:
+blender alter_logo_fire_animation.blend
 ```
 
 **3. Render Animation**
