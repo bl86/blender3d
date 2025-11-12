@@ -20,33 +20,55 @@ echo.
 
 REM Check if Blender is installed
 set "BLENDER_EXE="
+
+REM First, try blender in PATH
 where blender >nul 2>nul
 if %errorlevel% equ 0 (
     set "BLENDER_EXE=blender"
     goto :blender_found
 )
 
-REM Search common installation paths
-if exist "C:\Program Files\Blender Foundation\Blender 3.6\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.6\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 3.5\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.5\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 3.4\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.4\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 4.0\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 4.1\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 4.1\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender\blender.exe"
-) else (
-    echo ERROR: Blender is not installed or not in PATH
-    echo Please install Blender 3.0 or higher
-    echo Download: https://www.blender.org/download/
-    exit /b 1
+REM Search for any Blender installation in Program Files
+set "BLENDER_BASE=C:\Program Files\Blender Foundation"
+if exist "%BLENDER_BASE%" (
+    REM Look for any version by checking folders
+    for /d %%i in ("%BLENDER_BASE%\Blender*") do (
+        if exist "%%i\blender.exe" (
+            set "BLENDER_EXE=%%i\blender.exe"
+            goto :blender_found
+        )
+    )
 )
 
+REM If still not found, try specific version paths (newest first)
+for %%v in (4.5 4.4 4.3 4.2 4.1 4.0 3.6 3.5 3.4 3.3) do (
+    if exist "C:\Program Files\Blender Foundation\Blender %%v\blender.exe" (
+        set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender %%v\blender.exe"
+        goto :blender_found
+    )
+)
+
+REM Try without version number
+if exist "C:\Program Files\Blender Foundation\Blender\blender.exe" (
+    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender\blender.exe"
+    goto :blender_found
+)
+
+REM Not found
+echo ERROR: Blender is not installed or not in PATH
+echo.
+echo Searched in:
+echo   - System PATH
+echo   - C:\Program Files\Blender Foundation\
+echo.
+echo Please install Blender 3.0 or higher from:
+echo   https://www.blender.org/download/
+pause
+exit /b 1
+
 :blender_found
+echo Found Blender: !BLENDER_EXE!
+echo.
 
 REM Check if blend file exists
 if not exist "%BLEND_FILE%" (
@@ -76,6 +98,11 @@ if /i "%QUALITY%"=="preview" (
 ) else (
     echo Invalid quality option: %QUALITY%
     echo Use 'preview' or 'production'
+    echo.
+    echo Examples:
+    echo   render_animation.bat preview
+    echo   render_animation.bat production
+    pause
     exit /b 1
 )
 
@@ -88,6 +115,7 @@ echo.
 
 REM Render animation
 echo Starting render...
+echo This may take from 10 minutes (preview) to several hours (production)
 echo.
 
 "!BLENDER_EXE!" --background "%BLEND_FILE%" --python-expr "import bpy; bpy.context.scene.cycles.samples = %SAMPLES%; bpy.context.scene.render.resolution_percentage = %RESOLUTION%" --render-anim
@@ -95,6 +123,11 @@ echo.
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Render failed!
+    echo.
+    echo Troubleshooting:
+    echo   1. Check that blend file exists
+    echo   2. Make sure you have enough disk space (~5GB)
+    echo   3. Try: python scripts\check_system.py
     pause
     exit /b 1
 )
@@ -105,5 +138,9 @@ echo Render Complete!
 echo ================================
 echo.
 echo Output files: %OUTPUT_DIR%
+echo.
+echo To view the animation:
+echo   - Open any video player
+echo   - Load files from: %OUTPUT_DIR%
 echo.
 pause

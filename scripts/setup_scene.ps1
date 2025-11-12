@@ -12,25 +12,48 @@ Write-Host "================================" -ForegroundColor Green
 Write-Host ""
 
 # Find Blender
-$blenderPaths = @(
-    "C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
-    "C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-    "C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
-    "C:\Program Files\Blender Foundation\Blender 3.5\blender.exe",
-    "C:\Program Files\Blender Foundation\Blender 3.4\blender.exe",
-    "C:\Program Files\Blender Foundation\Blender\blender.exe"
-)
-
 $blenderExe = $null
-foreach ($path in $blenderPaths) {
-    if (Test-Path $path) {
-        $blenderExe = $path
-        break
+
+# First, try to find in PATH
+$blenderExe = (Get-Command blender -ErrorAction SilentlyContinue).Source
+
+if (-not $blenderExe) {
+    # Search in Blender Foundation folder for any version
+    $blenderBase = "C:\Program Files\Blender Foundation"
+    if (Test-Path $blenderBase) {
+        $folders = Get-ChildItem -Path $blenderBase -Directory -Filter "Blender*"
+        foreach ($folder in $folders) {
+            $testPath = Join-Path $folder.FullName "blender.exe"
+            if (Test-Path $testPath) {
+                $blenderExe = $testPath
+                break
+            }
+        }
     }
 }
 
 if (-not $blenderExe) {
-    $blenderExe = (Get-Command blender -ErrorAction SilentlyContinue).Source
+    # Fallback to specific version paths (newest first)
+    $blenderPaths = @(
+        "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 3.5\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 3.4\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 3.3\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender\blender.exe"
+    )
+
+    foreach ($path in $blenderPaths) {
+        if (Test-Path $path) {
+            $blenderExe = $path
+            break
+        }
+    }
 }
 
 if (-not $blenderExe) {

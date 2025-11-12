@@ -31,7 +31,32 @@ def check_blender():
 
     # On Windows, check common installation paths
     if platform.system() == 'Windows':
+        # First, try to search in Blender Foundation folder
+        blender_base = r"C:\Program Files\Blender Foundation"
+        if os.path.exists(blender_base):
+            for folder in os.listdir(blender_base):
+                blender_path = os.path.join(blender_base, folder, "blender.exe")
+                if os.path.exists(blender_path):
+                    try:
+                        result = subprocess.run(
+                            [blender_path, '--version'],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        version_line = result.stdout.split('\n')[0]
+                        print(f"✓ Blender found: {version_line}")
+                        print(f"  Location: {blender_path}")
+                        return True
+                    except:
+                        pass
+
+        # Fallback to specific version checks
         windows_paths = [
+            r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",

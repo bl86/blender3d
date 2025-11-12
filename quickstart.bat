@@ -78,32 +78,55 @@ timeout /t 2 >nul
 
 REM Find Blender installation
 set "BLENDER_EXE="
-if exist "C:\Program Files\Blender Foundation\Blender 3.6\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.6\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 3.5\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.5\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 3.4\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.4\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 4.0\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender 4.1\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 4.1\blender.exe"
-) else if exist "C:\Program Files\Blender Foundation\Blender\blender.exe" (
-    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender\blender.exe"
-) else (
-    REM Try blender in PATH
-    where blender >nul 2>nul
-    if !errorlevel! equ 0 (
-        set "BLENDER_EXE=blender"
-    ) else (
-        echo ERROR: Blender not found!
-        echo Please install Blender or add it to PATH
-        echo Download: https://www.blender.org/download/
-        pause
-        exit /b 1
+
+REM First, try blender in PATH
+where blender >nul 2>nul
+if %errorlevel% equ 0 (
+    set "BLENDER_EXE=blender"
+    goto :found_blender
+)
+
+REM Search for any Blender installation in Program Files
+set "BLENDER_BASE=C:\Program Files\Blender Foundation"
+if exist "%BLENDER_BASE%" (
+    REM Look for any version by checking folders
+    for /d %%i in ("%BLENDER_BASE%\Blender*") do (
+        if exist "%%i\blender.exe" (
+            set "BLENDER_EXE=%%i\blender.exe"
+            goto :found_blender
+        )
     )
 )
 
+REM If still not found, try specific version paths (newest first)
+for %%v in (4.5 4.4 4.3 4.2 4.1 4.0 3.6 3.5 3.4 3.3) do (
+    if exist "C:\Program Files\Blender Foundation\Blender %%v\blender.exe" (
+        set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender %%v\blender.exe"
+        goto :found_blender
+    )
+)
+
+REM Try without version number
+if exist "C:\Program Files\Blender Foundation\Blender\blender.exe" (
+    set "BLENDER_EXE=C:\Program Files\Blender Foundation\Blender\blender.exe"
+    goto :found_blender
+)
+
+REM Not found
+echo ERROR: Blender not found!
+echo.
+echo Searched in:
+echo   - System PATH
+echo   - C:\Program Files\Blender Foundation\
+echo.
+echo Please install Blender from:
+echo   https://www.blender.org/download/
+echo.
+echo Or add Blender to your system PATH
+pause
+exit /b 1
+
+:found_blender
 echo Using Blender: !BLENDER_EXE!
 echo.
 start "" "!BLENDER_EXE!" "%~dp0alter_logo_animation.blend"
@@ -116,8 +139,15 @@ echo ================================
 echo Session Complete!
 echo ================================
 echo.
+echo Blender is now open with your animation.
+echo.
 echo To render from command line:
-echo   scripts\render_animation.bat preview     # Fast preview
-echo   scripts\render_animation.bat production  # High quality
+echo   scripts\render_animation.bat preview     # Fast preview (10 min)
+echo   scripts\render_animation.bat production  # High quality (45+ min)
+echo.
+echo For help, see:
+echo   README.md           - Quick start guide
+echo   WINDOWS_INSTALL.md  - Detailed Windows guide
+echo   USAGE_EXAMPLES.md   - Practical examples
 echo.
 pause
