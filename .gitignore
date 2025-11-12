@@ -1,0 +1,34 @@
+# Blender cache files
+blendcache_*/
+*.blend1
+*.blend2
+
+# Output renders
+output/*.png
+output/*.jpg
+output/*.mp4
+output/*.avi
+output/*.mov
+
+# Temp files
+.write_test
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Keep directory structure
+!output/.gitkeep
+!assets/.gitkeep
