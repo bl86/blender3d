@@ -114,10 +114,10 @@ def import_svg_logo(svg_path):
     logo = bpy.context.active_object
     logo.name = "AlterLogo"
 
-    # Add minimal depth for 3D feel
-    logo.data.extrude = 0.03  # Very subtle depth
-    logo.data.bevel_depth = 0.01  # Minimal bevel
-    logo.data.bevel_resolution = 4
+    # Add minimal depth for 3D feel - NO BEVEL
+    logo.data.extrude = 0.05  # Small extrude only
+    logo.data.bevel_depth = 0.0  # No bevel - it ruins geometry
+    logo.data.bevel_resolution = 0
 
     # Convert to mesh
     print("  Converting to mesh...")
@@ -131,6 +131,10 @@ def import_svg_logo(svg_path):
     logo.location = (0, 0, 0)
     logo.scale = (2.5, 2.5, 2.5)
     bpy.ops.object.transform_apply(scale=True)
+
+    # Rotate to face camera (logo faces -Y direction)
+    logo.rotation_euler = (math.radians(90), 0, 0)
+    bpy.ops.object.transform_apply(rotation=True)
 
     print(f"  ✓ Logo ready: {logo.name}")
     return logo
@@ -284,12 +288,12 @@ def create_fire_simulation(logo):
     domain_settings.cache_frame_start = 1
     domain_settings.cache_frame_end = 300
 
-    # Emitter (torus around logo)
+    # Emitter (torus around logo) - encircles logo as it moves
     bpy.ops.mesh.primitive_torus_add(
         location=(0, 0, 0),
-        rotation=(math.radians(90), 0, 0),
-        major_radius=3.5,
-        minor_radius=0.8
+        rotation=(0, 0, 0),  # No rotation - surrounds logo naturally
+        major_radius=4.0,  # Bigger radius to fully surround logo
+        minor_radius=1.0
     )
     emitter = bpy.context.active_object
     emitter.name = "FireEmitter"
