@@ -34,6 +34,28 @@ This project contains a complete Blender animation setup featuring:
 
 ## Quick Start
 
+### 🐍 Python-Only Workflow (Cross-Platform - Simplest!)
+
+**One Command - Does Everything:**
+```bash
+blender --background --python make_animation.py
+```
+↳ Generates scene + renders animation (~45 min)
+
+**Quick Preview (10 min):**
+```bash
+blender --background --python make_animation.py -- --quick
+```
+
+**With Video File:**
+```bash
+blender --background --python make_animation.py -- --production --video
+```
+
+**📖 For detailed Python workflow:** See [PYTHON_WORKFLOW.md](PYTHON_WORKFLOW.md)
+
+---
+
 ### Windows Users
 
 #### One-Command Setup (Recommended)
