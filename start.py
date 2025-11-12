@@ -92,19 +92,23 @@ def print_menu():
     print()
     print("What would you like to do?")
     print()
-    print("  1. Make Animation (All-in-One) - RECOMMENDED")
+    print("  1. Generate Scene from SVG (RECOMMENDED)")
+    print("     → Single-file script with fire simulation")
+    print("     → Uses exact alter.svg logo")
+    print("     → Takes ~1-2 minutes")
+    print()
+    print("  2. Make Animation (All-in-One)")
     print("     → Generates scene + renders animation")
     print("     → Takes ~45 minutes")
     print()
-    print("  2. Quick Preview (Fast)")
+    print("  3. Quick Preview (Fast)")
     print("     → Generates + renders preview quality")
     print("     → Takes ~10 minutes")
     print()
-    print("  3. Just Generate Scene")
-    print("     → Creates .blend file only")
-    print("     → You can open it in Blender later")
+    print("  4. Just Generate Scene (Legacy)")
+    print("     → Creates .blend file from older script")
     print()
-    print("  4. Custom Animation (Advanced)")
+    print("  5. Custom Animation (Advanced)")
     print("     → Choose colors, fire intensity, etc.")
     print()
     print("  0. Exit")
@@ -150,7 +154,7 @@ def main():
         print_menu()
 
         try:
-            choice = input("Enter your choice (0-4): ").strip()
+            choice = input("Enter your choice (0-5): ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\n\nGoodbye!")
             return 0
@@ -160,6 +164,33 @@ def main():
             return 0
 
         elif choice == '1':
+            # Generate scene from SVG using ALTER_LOGO_COMPLETE.py
+            print("\n" + "=" * 60)
+            print("  GENERATE SCENE FROM SVG")
+            print("=" * 60)
+            print("\nThis will create the complete animation scene using ALTER_LOGO_COMPLETE.py")
+            print("The scene will include:")
+            print("  • Golden metallic ALTER logo imported from SVG")
+            print("  • Fire simulation around the logo")
+            print("  • Camera tracking and professional lighting")
+            print("  • 300 frames (10 seconds)")
+            print()
+            print("Estimated time: ~1-2 minutes")
+            print()
+            confirm = input("Continue? (y/n): ").strip().lower()
+            if confirm == 'y':
+                script = os.path.join(script_dir, 'ALTER_LOGO_COMPLETE.py')
+                success = run_blender_script(blender_exe, script)
+                if success:
+                    print("\n✓ Scene generated!")
+                    print("Open 'alter_logo_fire_animation.blend' in Blender")
+                    print("\nTo preview: Press SPACEBAR in viewport")
+                    print("To render: Press Ctrl+F12")
+                else:
+                    print("\n✗ Scene generation failed. Check errors above.")
+                input("\nPress Enter to continue...")
+
+        elif choice == '2':
             # All-in-one
             print("\n" + "=" * 60)
             print("  ALL-IN-ONE ANIMATION")
@@ -178,7 +209,7 @@ def main():
                     print("\n✗ Animation failed. Check errors above.")
                 input("\nPress Enter to continue...")
 
-        elif choice == '2':
+        elif choice == '3':
             # Quick preview
             print("\n" + "=" * 60)
             print("  QUICK PREVIEW")
@@ -197,10 +228,10 @@ def main():
                     print("\n✗ Preview failed. Check errors above.")
                 input("\nPress Enter to continue...")
 
-        elif choice == '3':
-            # Just generate scene
+        elif choice == '4':
+            # Just generate scene (legacy)
             print("\n" + "=" * 60)
-            print("  GENERATE SCENE")
+            print("  GENERATE SCENE (LEGACY)")
             print("=" * 60)
             print("\nThis will create the .blend file.")
             print("You can open it in Blender later.")
@@ -216,7 +247,7 @@ def main():
                     print("\n✗ Scene generation failed. Check errors above.")
                 input("\nPress Enter to continue...")
 
-        elif choice == '4':
+        elif choice == '5':
             # Custom animation
             print("\n" + "=" * 60)
             print("  CUSTOM ANIMATION")
@@ -248,7 +279,7 @@ def main():
             input("\nPress Enter to continue...")
 
         else:
-            print("\nInvalid choice. Please enter 0-4.")
+            print("\nInvalid choice. Please enter 0-5.")
             input("Press Enter to continue...")
 
 
