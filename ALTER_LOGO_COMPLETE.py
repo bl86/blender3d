@@ -114,9 +114,9 @@ def import_svg_logo(svg_path):
     logo = bpy.context.active_object
     logo.name = "AlterLogo"
 
-    # Add depth
-    logo.data.extrude = 0.15
-    logo.data.bevel_depth = 0.02
+    # Add minimal depth for 3D feel
+    logo.data.extrude = 0.03  # Very subtle depth
+    logo.data.bevel_depth = 0.01  # Minimal bevel
     logo.data.bevel_resolution = 4
 
     # Convert to mesh
@@ -207,7 +207,7 @@ def setup_camera(logo):
 
 
 def animate_logo(logo):
-    """Animate logo movement"""
+    """Animate logo movement - straight to camera, no rotation"""
     print("  Animating logo...")
 
     # Start far
@@ -218,11 +218,9 @@ def animate_logo(logo):
     logo.location = (0, -5, 0)
     logo.keyframe_insert(data_path="location", frame=300)
 
-    # Rotation
+    # No rotation - keep logo facing camera
     logo.rotation_euler = (0, 0, 0)
     logo.keyframe_insert(data_path="rotation_euler", frame=1)
-
-    logo.rotation_euler = (0.1, 0, math.radians(360))
     logo.keyframe_insert(data_path="rotation_euler", frame=300)
 
     # Smooth curves
