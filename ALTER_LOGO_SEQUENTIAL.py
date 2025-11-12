@@ -291,11 +291,7 @@ def create_fire_for_element(element, index):
     emitter.parent = element
     emitter.matrix_parent_inverse = element.matrix_world.inverted()
 
-    # Hide emitter
-    emitter.hide_render = True
-    emitter.hide_viewport = True
-
-    # Add fluid flow
+    # Add fluid flow (must be done BEFORE hiding the object)
     bpy.ops.object.modifier_add(type='FLUID')
     emitter.modifiers["Fluid"].fluid_type = 'FLOW'
     flow = emitter.modifiers["Fluid"].flow_settings
@@ -336,6 +332,10 @@ def create_fire_for_element(element, index):
                 emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=end_frame + 10)
     except:
         pass
+
+    # Hide emitter (AFTER adding modifiers and configuring)
+    emitter.hide_render = True
+    emitter.hide_viewport = True
 
     return emitter
 

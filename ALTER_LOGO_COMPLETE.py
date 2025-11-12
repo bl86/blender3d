@@ -335,12 +335,7 @@ def create_fire_simulation(logo):
     emitter.parent = logo
     emitter.matrix_parent_inverse = logo.matrix_world.inverted()
 
-    # Hide emitter completely - don't want to see wireframe
-    emitter.hide_render = True
-    emitter.hide_viewport = True  # Also hide in viewport
-    emitter.display_type = 'WIRE'  # Show only wireframe if visible
-
-    # Add flow
+    # Add flow (must be done BEFORE hiding the object)
     bpy.ops.object.modifier_add(type='FLUID')
     emitter.modifiers["Fluid"].fluid_type = 'FLOW'
     flow = emitter.modifiers["Fluid"].flow_settings
@@ -369,6 +364,11 @@ def create_fire_simulation(logo):
     except (AttributeError, TypeError):
         # Keyframing might not work, try simple approach
         pass
+
+    # Hide emitter completely - don't want to see wireframe (AFTER adding modifiers)
+    emitter.hide_render = True
+    emitter.hide_viewport = True  # Also hide in viewport
+    emitter.display_type = 'WIRE'  # Show only wireframe if visible
 
     # Fire material using Principled Volume for proper fire rendering
     mat = bpy.data.materials.new(name="FireMaterial")
