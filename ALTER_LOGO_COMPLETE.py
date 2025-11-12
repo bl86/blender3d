@@ -253,12 +253,12 @@ def create_fire_simulation(logo):
     domain_settings.domain_type = 'GAS'
     domain_settings.resolution_max = 128  # Lower for speed
     domain_settings.use_noise = True
-    domain_settings.noise_scale = 1.5
+    domain_settings.noise_scale = 2  # Must be int
 
     # Enable fire
     domain_settings.use_fire = True
-    domain_settings.alpha = 1
-    domain_settings.beta = 1.5
+    domain_settings.alpha = 1.0
+    domain_settings.beta = 1.0
     domain_settings.flame_smoke = 1.0
     domain_settings.vorticity = 0.3
 
