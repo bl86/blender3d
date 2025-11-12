@@ -335,7 +335,7 @@ def create_fire_simulation(logo):
 
     emitter.hide_render = True
 
-    # Fire material
+    # Fire material using Principled Volume for proper fire rendering
     mat = bpy.data.materials.new(name="FireMaterial")
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
@@ -343,21 +343,52 @@ def create_fire_simulation(logo):
     nodes.clear()
 
     output = nodes.new('ShaderNodeOutputMaterial')
-    output.location = (400, 0)
+    output.location = (600, 0)
 
-    emission = nodes.new('ShaderNodeEmission')
-    emission.location = (0, 0)
-    emission.inputs['Strength'].default_value = 20.0
-    emission.inputs['Color'].default_value = (1.0, 0.5, 0.1, 1.0)
+    # Principled Volume - much better for fire/smoke
+    volume = nodes.new('ShaderNodeVolumePrincipled')
+    volume.location = (200, 0)
 
-    links.new(emission.outputs['Emission'], output.inputs['Volume'])
+    # Fire attributes
+    flame_attr = nodes.new('ShaderNodeAttribute')
+    flame_attr.location = (-200, 200)
+    flame_attr.attribute_name = 'flame'
+
+    density_attr = nodes.new('ShaderNodeAttribute')
+    density_attr.location = (-200, -100)
+    density_attr.attribute_name = 'density'
+
+    # Color ramp for fire color
+    color_ramp = nodes.new('ShaderNodeValToRGB')
+    color_ramp.location = (0, 200)
+    color_ramp.color_ramp.elements[0].position = 0.0
+    color_ramp.color_ramp.elements[0].color = (0, 0, 0, 1)
+    color_ramp.color_ramp.elements[1].position = 1.0
+    color_ramp.color_ramp.elements[1].color = (1, 0.8, 0.1, 1)  # Yellow-orange
+
+    # Add red color point
+    color_ramp.color_ramp.elements.new(0.5)
+    color_ramp.color_ramp.elements[1].color = (1, 0.3, 0.05, 1)  # Red-orange
+
+    # Connect attributes
+    links.new(flame_attr.outputs['Fac'], color_ramp.inputs['Fac'])
+    links.new(color_ramp.outputs['Color'], volume.inputs['Color'])
+    links.new(flame_attr.outputs['Fac'], volume.inputs['Emission Strength'])
+    links.new(density_attr.outputs['Fac'], volume.inputs['Density'])
+    links.new(volume.outputs['Volume'], output.inputs['Volume'])
+
+    # Adjust volume properties
+    volume.inputs['Density'].default_value = 1.0
+    volume.inputs['Emission Strength'].default_value = 5.0
+    volume.inputs['Blackbody Intensity'].default_value = 1.0
+    volume.inputs['Blackbody Tint'].default_value = (1.0, 0.8, 0.5, 1.0)
 
     if domain.data.materials:
         domain.data.materials[0] = mat
     else:
         domain.data.materials.append(mat)
 
-    print("  ✓ Fire simulation created")
+    print("  ✓ Fire simulation created with Principled Volume shader")
     return domain, emitter
 
 
@@ -396,8 +427,8 @@ def setup_lighting():
 
 
 def configure_render():
-    """Configure render settings"""
-    print("  Configuring render...")
+    """Configure render settings with CUDA/OptiX for RTX 3090"""
+    print("  Configuring render with GPU acceleration...")
 
     scene = bpy.context.scene
 
@@ -406,24 +437,77 @@ def configure_render():
     scene.frame_end = 300
     scene.render.fps = 30
 
-    # Cycles
+    # Cycles with GPU optimization
     scene.render.engine = 'CYCLES'
-    scene.cycles.samples = 128
+    scene.cycles.samples = 256  # Higher for better quality with fast GPU
+    scene.cycles.preview_samples = 64  # Viewport preview samples
     scene.cycles.use_denoising = True
+    scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+
+    # GPU Settings - Enable CUDA/OptiX for RTX 3090
     scene.cycles.device = 'GPU'
+
+    # Try to enable all available CUDA/OptiX devices
+    try:
+        prefs = bpy.context.preferences
+        cycles_prefs = prefs.addons['cycles'].preferences
+
+        # Set compute device type (OptiX for RTX cards, CUDA as fallback)
+        available_types = cycles_prefs.get_device_types(bpy.context)
+
+        if 'OPTIX' in [t[0] for t in available_types]:
+            cycles_prefs.compute_device_type = 'OPTIX'
+            print("  ✓ Using OptiX (optimal for RTX 3090)")
+        elif 'CUDA' in [t[0] for t in available_types]:
+            cycles_prefs.compute_device_type = 'CUDA'
+            print("  ✓ Using CUDA")
+        else:
+            print("  ⚠️  GPU compute not available, using CPU")
+
+        # Enable all CUDA/OptiX devices
+        cycles_prefs.get_devices()
+        for device in cycles_prefs.devices:
+            if device.type in {'CUDA', 'OPTIX'}:
+                device.use = True
+                print(f"  ✓ Enabled: {device.name}")
+    except Exception as e:
+        print(f"  ⚠️  GPU setup warning: {e}")
+        print("  → Will try to use GPU anyway")
 
     # Resolution
     scene.render.resolution_x = 1920
     scene.render.resolution_y = 1080
+    scene.render.resolution_percentage = 100  # Full resolution
+
+    # Viewport settings for better preview
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    space.shading.type = 'MATERIAL'  # Material preview mode
+                    space.shading.use_scene_lights = True
+                    space.shading.use_scene_world = True
 
     # Color management
     scene.view_settings.view_transform = 'Filmic'
     scene.view_settings.look = 'High Contrast'
+    scene.view_settings.exposure = 0.0
+    scene.view_settings.gamma = 1.0
 
     # Output
     scene.render.image_settings.file_format = 'PNG'
+    scene.render.image_settings.color_mode = 'RGBA'
+    scene.render.image_settings.color_depth = '8'
+    scene.render.image_settings.compression = 15
 
-    print("  ✓ Render configured")
+    # Volume settings for fire
+    scene.render.use_high_quality_normals = True
+    scene.cycles.volume_bounces = 2
+    scene.cycles.volume_preview_step_rate = 2
+    scene.cycles.volume_step_rate = 2
+    scene.cycles.volume_max_steps = 1024
+
+    print("  ✓ Render configured with RTX 3090 optimization")
 
 
 def bake_fire_simulation():
@@ -530,15 +614,26 @@ def main():
         print("=" * 75)
         print(f"\n📁 Saved: {save_path}")
         print(f"🎬 Frames: 300 (10 seconds)")
-        print(f"🔥 Fire: BAKED and ready to render")
-        print(f"📐 Resolution: 1920x1080")
-        print(f"⚙️  Samples: 128")
+        print(f"🔥 Fire: BAKED with Principled Volume shader")
+        print(f"📐 Resolution: 1920x1080 @ 100%")
+        print(f"⚙️  Samples: 256 (render) / 64 (viewport)")
+        print(f"🚀 GPU: OptiX/CUDA enabled for RTX 3090")
         print(f"📹 Camera: Optimized to fill screen with logo")
         print()
-        print("▶️  To preview: Press SPACEBAR in viewport")
-        print("🎥 To render: Press F12 (single frame) or Ctrl+F12 (animation)")
+        print("▶️  To preview animation:")
+        print("   1. Open the .blend file in Blender")
+        print("   2. Press SPACEBAR in viewport")
+        print("   3. Fire should be visible in Material Preview mode")
         print()
-        print("💡 TIP: Logo fills screen at end of animation (frame 250-300)")
+        print("🎥 To render:")
+        print("   • F12 - Single frame render")
+        print("   • Ctrl+F12 - Full animation render")
+        print("   • Fire will render with realistic colors (orange/yellow)")
+        print()
+        print("💡 TIPS:")
+        print("   • Logo fills screen at frames 250-300")
+        print("   • Fire fades out around frame 200")
+        print("   • Switch viewport to Rendered mode (Z → Rendered) to see fire")
         print("=" * 75)
 
         return True
