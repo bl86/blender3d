@@ -114,8 +114,8 @@ def import_svg_logo(svg_path):
     logo = bpy.context.active_object
     logo.name = "AlterLogo"
 
-    # Add minimal depth for 3D feel - NO BEVEL
-    logo.data.extrude = 0.05  # Small extrude only
+    # Add very minimal depth - just enough for 3D effect
+    logo.data.extrude = 0.005  # 10x smaller - clean logo appearance
     logo.data.bevel_depth = 0.0  # No bevel - it ruins geometry
     logo.data.bevel_resolution = 0
 
@@ -313,7 +313,7 @@ def create_fire_simulation(logo):
     domain_settings.cache_frame_start = 1
     domain_settings.cache_frame_end = 180  # Fire ends at 150, add buffer
 
-    # Emitter - duplicate logo shape so fire matches logo outline
+    # Emitter - duplicate logo and add wireframe for fire along edges
     bpy.ops.object.select_all(action='DESELECT')
     logo.select_set(True)
     bpy.context.view_layer.objects.active = logo
@@ -321,14 +321,21 @@ def create_fire_simulation(logo):
     emitter = bpy.context.active_object
     emitter.name = "FireEmitter"
 
-    # Scale up slightly so fire surrounds logo
-    emitter.scale = (1.2, 1.2, 1.2)  # Bigger scale for better fire coverage
+    # Add Wireframe modifier to emit fire from logo edges/contours
+    wireframe_mod = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
+    wireframe_mod.thickness = 0.08  # Thin wireframe around logo contours
+    wireframe_mod.use_replace = True  # Replace mesh with wireframe
+    wireframe_mod.use_boundary = True  # Include boundary edges
+    wireframe_mod.use_even_offset = True
+
+    # Apply modifiers so fluid system sees the wireframe
+    bpy.ops.object.convert(target='MESH')
 
     # Parent to logo so it follows
     emitter.parent = logo
     emitter.matrix_parent_inverse = logo.matrix_world.inverted()
 
-    # Hide emitter completely - don't want to see duplicate logo
+    # Hide emitter completely - don't want to see wireframe
     emitter.hide_render = True
     emitter.hide_viewport = True  # Also hide in viewport
     emitter.display_type = 'WIRE'  # Show only wireframe if visible
@@ -425,25 +432,60 @@ def create_fire_simulation(logo):
 
 
 def setup_lighting():
-    """Setup 3-point lighting"""
-    print("  Setting up lights...")
+    """Setup 3-point lighting with ground plane for reflections"""
+    print("  Setting up lights and reflective ground...")
 
-    # Key light
+    # Ground plane for reflections - positioned below logo path
+    bpy.ops.mesh.primitive_plane_add(size=30, location=(0, 5, -3))
+    ground = bpy.context.active_object
+    ground.name = "GroundPlane"
+
+    # Reflective dark material for ground
+    ground_mat = bpy.data.materials.new(name="GroundMaterial")
+    ground_mat.use_nodes = True
+    ground_nodes = ground_mat.node_tree.nodes
+    ground_links = ground_mat.node_tree.links
+    ground_nodes.clear()
+
+    ground_output = ground_nodes.new('ShaderNodeOutputMaterial')
+    ground_output.location = (400, 0)
+
+    ground_bsdf = ground_nodes.new('ShaderNodeBsdfPrincipled')
+    ground_bsdf.location = (0, 0)
+    ground_bsdf.inputs['Base Color'].default_value = (0.02, 0.02, 0.03, 1.0)  # Very dark
+    ground_bsdf.inputs['Metallic'].default_value = 1.0  # Metallic for reflections
+    ground_bsdf.inputs['Roughness'].default_value = 0.05  # Very smooth = strong reflections
+    ground_bsdf.inputs['Specular IOR Level'].default_value = 1.0
+
+    ground_links.new(ground_bsdf.outputs['BSDF'], ground_output.inputs['Surface'])
+
+    if ground.data.materials:
+        ground.data.materials[0] = ground_mat
+    else:
+        ground.data.materials.append(ground_mat)
+
+    # Key light - much stronger
     bpy.ops.object.light_add(type='AREA', location=(5, -10, 8))
     key = bpy.context.active_object
-    key.data.energy = 500
+    key.data.energy = 1500  # 3x stronger
     key.data.size = 5
 
-    # Fill light
+    # Fill light - stronger
     bpy.ops.object.light_add(type='AREA', location=(-5, -8, 4))
     fill = bpy.context.active_object
-    fill.data.energy = 200
+    fill.data.energy = 600  # 3x stronger
     fill.data.size = 4
 
-    # Rim light
+    # Rim light - much stronger
     bpy.ops.object.light_add(type='SPOT', location=(0, 10, 5))
     rim = bpy.context.active_object
-    rim.data.energy = 300
+    rim.data.energy = 1000  # 3x stronger
+
+    # Additional top light for better reflections
+    bpy.ops.object.light_add(type='AREA', location=(0, -5, 10))
+    top = bpy.context.active_object
+    top.data.energy = 800
+    top.data.size = 6
 
     # Environment - gradient for better reflections
     world = bpy.context.scene.world
@@ -474,10 +516,10 @@ def setup_lighting():
     sky.sun_rotation = math.radians(90)
     sky.ground_albedo = 0.3
 
-    # Background shader
+    # Background shader - brighter for better reflections
     bg = world_nodes.new('ShaderNodeBackground')
     bg.location = (0, 300)
-    bg.inputs['Strength'].default_value = 1.0
+    bg.inputs['Strength'].default_value = 1.5  # Brighter environment
 
     # Mix with dark color for dramatic look
     mix_rgb = world_nodes.new('ShaderNodeMixRGB')
@@ -561,11 +603,24 @@ def configure_render():
     scene.view_settings.exposure = 0.0
     scene.view_settings.gamma = 1.0
 
-    # Output
+    # Output - PNG sequence with transparency for Premiere
     scene.render.image_settings.file_format = 'PNG'
-    scene.render.image_settings.color_mode = 'RGBA'
-    scene.render.image_settings.color_depth = '8'
+    scene.render.image_settings.color_mode = 'RGBA'  # Include alpha channel
+    scene.render.image_settings.color_depth = '16'  # Higher quality
     scene.render.image_settings.compression = 15
+
+    # Enable transparency (film transparent)
+    scene.render.film_transparent = True
+
+    # Output path - will create frames in output/ folder
+    import os
+    output_dir = os.path.join(bpy.path.abspath("//"), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    scene.render.filepath = os.path.join(output_dir, "frame_####")
+
+    # Alternative: TARGA format (uncomment below to use instead of PNG)
+    # scene.render.image_settings.file_format = 'TARGA'
+    # scene.render.image_settings.color_mode = 'RGBA'
 
     # Volume settings for fire - optimized for visibility
     scene.render.use_high_quality_normals = True
@@ -681,26 +736,36 @@ def main():
         print("=" * 75)
         print(f"\n📁 Saved: {save_path}")
         print(f"🎬 Frames: 300 (10 seconds)")
-        print(f"🔥 Fire: BAKED with Principled Volume shader")
-        print(f"📐 Resolution: 1920x1080 @ 100%")
+        print(f"🔥 Fire: BAKED - emits from logo edges/contours")
+        print(f"📐 Resolution: 1920x1080 @ 100% (16-bit PNG)")
         print(f"⚙️  Samples: 256 (render) / 64 (viewport)")
         print(f"🚀 GPU: OptiX/CUDA enabled for RTX 3090")
-        print(f"📹 Camera: Optimized to fill screen with logo")
+        print(f"📹 Camera: Centered, logo perfectly framed")
+        print(f"✨ Extrude: 0.005 (minimal depth, clean look)")
         print()
         print("▶️  To preview animation:")
         print("   1. Open the .blend file in Blender")
         print("   2. Press SPACEBAR in viewport")
-        print("   3. Fire should be visible in Material Preview mode")
+        print("   3. Switch to Rendered mode (Z → Rendered) to see fire")
         print()
-        print("🎥 To render:")
-        print("   • F12 - Single frame render")
-        print("   • Ctrl+F12 - Full animation render")
-        print("   • Fire will render with realistic colors (orange/yellow)")
+        print("🎥 To render PNG sequence (transparent background):")
+        print("   • Ctrl+F12 - Renders to output/frame_####.png")
+        print("   • Transparent background enabled (film_transparent = True)")
+        print("   • Ready for Premiere Pro import")
         print()
-        print("💡 TIPS:")
-        print("   • Logo fills screen at frames 250-300")
-        print("   • Fire fades out around frame 200")
-        print("   • Switch viewport to Rendered mode (Z → Rendered) to see fire")
+        print("📂 Output location:")
+        print("   • PNG sequence: output/frame_0001.png, frame_0002.png, etc.")
+        print("   • Use File > Import > Media in Premiere")
+        print()
+        print("🎨 For TARGA format instead:")
+        print("   • Open .blend file")
+        print("   • Output Properties → File Format → Targa")
+        print()
+        print("✨ Scene features:")
+        print("   • Fire follows logo contours (wireframe emitter)")
+        print("   • Reflective ground plane for dramatic reflections")
+        print("   • Strong 4-point lighting + Sky environment")
+        print("   • Fire fades at frame 120-150")
         print("=" * 75)
 
         return True
