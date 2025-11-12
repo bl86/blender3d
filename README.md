@@ -30,43 +30,86 @@ This project contains a complete Blender animation setup featuring:
 - **Python** 3.9+ (comes with Blender)
 - **Disk Space**: ~5GB for cache and output files
 - **RAM**: 8GB minimum, 16GB+ recommended
+- **OS**: Windows 10/11, Linux, or macOS
 
 ## Quick Start
 
-### 1. Generate Scene
+### Windows Users
 
-Run the setup script to create the Blender scene:
+#### One-Command Setup (Recommended)
 
+**Option 1: Batch Script**
+```cmd
+quickstart.bat
+```
+
+**Option 2: PowerShell** (if you prefer PowerShell)
+```powershell
+.\quickstart.ps1
+```
+
+This will automatically:
+1. Check system requirements
+2. Generate the Blender scene
+3. Open Blender with the animation
+
+#### Manual Steps
+
+**1. Generate Scene**
+```cmd
+scripts\setup_scene.bat
+```
+
+**2. Preview in Blender**
+```cmd
+"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe" alter_logo_animation.blend
+```
+Or if Blender is in PATH:
+```cmd
+blender alter_logo_animation.blend
+```
+
+**3. Render Animation**
+
+Quick preview (faster):
+```cmd
+scripts\render_animation.bat preview
+```
+
+Production quality:
+```cmd
+scripts\render_animation.bat production
+```
+
+### Linux / macOS Users
+
+#### One-Command Setup (Recommended)
+```bash
+chmod +x quickstart.sh scripts/*.sh
+./quickstart.sh
+```
+
+#### Manual Steps
+
+**1. Generate Scene**
 ```bash
 chmod +x scripts/*.sh
 ./scripts/setup_scene.sh
 ```
 
-This will:
-- Import the alter.svg logo
-- Setup all materials, lighting, and camera
-- Create fire simulation
-- Configure render settings
-- Save as `alter_logo_animation.blend`
-
-### 2. Preview in Blender
-
-Open the generated file in Blender GUI:
-
+**2. Preview in Blender**
 ```bash
 blender alter_logo_animation.blend
 ```
 
-Press **Spacebar** to preview the animation in the viewport.
+**3. Render Animation**
 
-### 3. Render Animation
-
-#### Quick Preview (faster, lower quality)
+Quick preview:
 ```bash
 ./scripts/render_animation.sh preview
 ```
 
-#### Production Quality (slower, high quality)
+Production quality:
 ```bash
 ./scripts/render_animation.sh production
 ```
@@ -76,19 +119,39 @@ Or render directly with Blender:
 blender -b alter_logo_animation.blend -a
 ```
 
+### Tips for All Platforms
+
+- Press **Spacebar** in Blender to play/pause animation preview
+- Press **F12** to render current frame
+- Press **Ctrl+F12** to render full animation
+- Animation is 300 frames (10 seconds at 30fps)
+- Fire fades out around frame 200
+
 ## Project Structure
 
 ```
 blender3d/
 ├── alter.svg                      # Source logo file
 ├── alter_logo_animation.blend     # Generated Blender scene (after setup)
+├── quickstart.sh                  # Linux/Mac one-command setup
+├── quickstart.bat                 # Windows batch one-command setup
+├── quickstart.ps1                 # Windows PowerShell one-command setup
 ├── scripts/
 │   ├── logo_animation.py          # Main animation setup script
-│   ├── setup_scene.sh             # Scene generation helper
-│   └── render_animation.sh        # Rendering helper
+│   ├── advanced_setup.py          # Animation with customizable presets
+│   ├── animation_config.py        # Preset configuration system
+│   ├── check_system.py            # System requirements validator
+│   ├── setup_scene.sh             # Linux/Mac scene generation
+│   ├── setup_scene.bat            # Windows batch scene generation
+│   ├── setup_scene.ps1            # Windows PowerShell scene generation
+│   ├── render_animation.sh        # Linux/Mac rendering helper
+│   ├── render_animation.bat       # Windows batch rendering helper
+│   └── render_animation.ps1       # Windows PowerShell rendering helper
 ├── assets/                        # Additional assets (textures, etc.)
 ├── output/                        # Rendered output files
-└── README.md                      # This file
+├── README.md                      # This file
+├── PROJECT_INFO.md                # Technical documentation
+└── USAGE_EXAMPLES.md              # Practical examples and recipes
 ```
 
 ## Technical Details
@@ -184,6 +247,27 @@ end_pos = Vector((0, -5, 0))     # Ending distance (closer)
 5. **Samples**: Lower samples for previews (64 is usually enough)
 
 ## Troubleshooting
+
+### Windows: Blender Not Found
+If scripts can't find Blender:
+1. **Add to PATH**: Add Blender installation directory to Windows PATH
+   - Search "Environment Variables" in Windows
+   - Edit System PATH variable
+   - Add: `C:\Program Files\Blender Foundation\Blender 3.6\`
+2. **Or use full path** in commands:
+   ```cmd
+   "C:\Program Files\Blender Foundation\Blender 3.6\blender.exe" --background --python scripts\logo_animation.py
+   ```
+
+### Windows: PowerShell Execution Policy
+If `.ps1` scripts don't run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Windows: Script won't run from double-click
+Right-click `.bat` file → **Run as administrator** (if in protected folder)
+Or run from Command Prompt/PowerShell instead.
 
 ### Fire Not Visible
 - Ensure fluid cache is baked (Cache → Bake All)

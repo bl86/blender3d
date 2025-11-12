@@ -1,16 +1,21 @@
 """
 System check utility for Blender animation project
 Verifies all dependencies and system requirements
+Cross-platform: Windows, Linux, macOS
 """
 
 import sys
 import os
 import subprocess
 import platform
+import shutil
 
 
 def check_blender():
     """Check if Blender is installed and get version"""
+    blender_exe = None
+
+    # Try to find blender in PATH
     try:
         result = subprocess.run(
             ['blender', '--version'],
@@ -22,9 +27,41 @@ def check_blender():
         print(f"✓ Blender found: {version_line}")
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("✗ Blender not found in PATH")
-        print("  Install from: https://www.blender.org/download/")
-        return False
+        pass
+
+    # On Windows, check common installation paths
+    if platform.system() == 'Windows':
+        windows_paths = [
+            r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 3.5\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 3.4\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 3.3\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender\blender.exe",
+        ]
+
+        for path in windows_paths:
+            if os.path.exists(path):
+                try:
+                    result = subprocess.run(
+                        [path, '--version'],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    version_line = result.stdout.split('\n')[0]
+                    print(f"✓ Blender found: {version_line}")
+                    print(f"  Location: {path}")
+                    return True
+                except:
+                    pass
+
+    print("✗ Blender not found in PATH or common locations")
+    print("  Install from: https://www.blender.org/download/")
+    if platform.system() == 'Windows':
+        print("  Or add Blender to PATH (see README)")
+    return False
 
 
 def check_python():
@@ -68,8 +105,9 @@ def check_disk_space():
     project_root = os.path.dirname(script_dir)
 
     try:
-        stat = os.statvfs(project_root)
-        free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
+        # Use shutil.disk_usage for cross-platform compatibility
+        stat = shutil.disk_usage(project_root)
+        free_gb = stat.free / (1024**3)
 
         if free_gb >= 5:
             print(f"✓ Disk space: {free_gb:.1f} GB available")
@@ -77,27 +115,51 @@ def check_disk_space():
         else:
             print(f"⚠ Disk space: {free_gb:.1f} GB (recommended: 5+ GB)")
             return True
-    except:
-        print("? Could not check disk space")
+    except Exception as e:
+        print(f"? Could not check disk space: {e}")
         return True
 
 
 def check_gpu():
     """Check for GPU acceleration support"""
-    # This is a basic check - actual GPU detection would require
-    # running inside Blender's Python environment
     system = platform.system()
+    gpu_found = False
 
-    if system == 'Linux':
+    if system == 'Linux' or system == 'Windows':
         # Check for NVIDIA
         try:
-            subprocess.run(['nvidia-smi'], capture_output=True, check=True)
+            result = subprocess.run(
+                ['nvidia-smi'],
+                capture_output=True,
+                check=True,
+                timeout=5
+            )
             print("✓ NVIDIA GPU detected (nvidia-smi available)")
-            return True
+            gpu_found = True
         except:
             pass
 
-    print("? GPU check requires running inside Blender")
+    if system == 'Windows' and not gpu_found:
+        # Check for AMD on Windows using wmic
+        try:
+            result = subprocess.run(
+                ['wmic', 'path', 'win32_VideoController', 'get', 'name'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if 'AMD' in result.stdout or 'Radeon' in result.stdout:
+                print("✓ AMD GPU detected")
+                gpu_found = True
+            elif 'Intel' in result.stdout and 'NVIDIA' not in result.stdout:
+                print("⚠ Intel integrated GPU detected (slower rendering)")
+                gpu_found = True
+        except:
+            pass
+
+    if not gpu_found:
+        print("? GPU check requires running inside Blender")
+
     print("  Enable GPU in: Edit → Preferences → System → Cycles Render Devices")
     return True
 
@@ -149,9 +211,16 @@ def main():
         print("✓ All checks passed! Ready to create animation.")
         print()
         print("Next steps:")
-        print("  1. Run: ./scripts/setup_scene.sh")
-        print("  2. Open: blender alter_logo_animation.blend")
-        print("  3. Render: ./scripts/render_animation.sh")
+
+        system = platform.system()
+        if system == 'Windows':
+            print("  1. Run: quickstart.bat  (or quickstart.ps1 for PowerShell)")
+            print("  2. Or: scripts\\setup_scene.bat")
+            print("  3. Render: scripts\\render_animation.bat production")
+        else:
+            print("  1. Run: ./quickstart.sh")
+            print("  2. Or: ./scripts/setup_scene.sh")
+            print("  3. Render: ./scripts/render_animation.sh production")
     else:
         print("⚠ Some checks failed. Please resolve issues above.")
         return 1
