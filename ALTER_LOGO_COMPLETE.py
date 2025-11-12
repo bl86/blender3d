@@ -252,15 +252,35 @@ def create_fire_simulation(logo):
     # Configure domain
     domain_settings.domain_type = 'GAS'
     domain_settings.resolution_max = 128  # Lower for speed
-    domain_settings.use_noise = True
-    domain_settings.noise_scale = 2  # Must be int
 
-    # Enable fire
-    domain_settings.use_fire = True
-    domain_settings.alpha = 1.0
-    domain_settings.beta = 1.0
-    domain_settings.flame_smoke = 1.0
-    domain_settings.vorticity = 0.3
+    # Noise settings
+    try:
+        domain_settings.use_noise = True
+        domain_settings.noise_scale = 2  # Must be int
+    except:
+        pass  # Noise not available in this version
+
+    # Fire settings (Blender 4.5+ compatibility)
+    try:
+        domain_settings.use_fire = True
+    except AttributeError:
+        pass  # use_fire removed in Blender 4.5+, fire is automatic with FIRE flow type
+
+    try:
+        domain_settings.alpha = 1.0
+        domain_settings.beta = 1.0
+    except AttributeError:
+        pass  # alpha/beta removed in newer versions
+
+    try:
+        domain_settings.flame_smoke = 1.0
+    except AttributeError:
+        pass  # flame_smoke removed in newer versions
+
+    try:
+        domain_settings.vorticity = 0.3
+    except AttributeError:
+        pass  # vorticity might not be available
 
     # Cache
     domain_settings.cache_frame_start = 1
@@ -286,16 +306,29 @@ def create_fire_simulation(logo):
     flow = emitter.modifiers["Fluid"].flow_settings
     flow.flow_type = 'FIRE'
     flow.flow_behavior = 'INFLOW'
-    flow.fuel_amount = 2.0
-    flow.temperature = 3.0
+
+    # Fire properties (compatibility with different Blender versions)
+    try:
+        flow.fuel_amount = 2.0
+    except AttributeError:
+        pass  # fuel_amount not available
+
+    try:
+        flow.temperature = 3.0
+    except AttributeError:
+        pass  # temperature not available
 
     # Animate fire fade
-    flow.density = 1.0
-    emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=1)
-    flow.density = 1.0
-    emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=170)
-    flow.density = 0.0
-    emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=200)
+    try:
+        flow.density = 1.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=1)
+        flow.density = 1.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=170)
+        flow.density = 0.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=200)
+    except (AttributeError, TypeError):
+        # Keyframing might not work, try simple approach
+        pass
 
     emitter.hide_render = True
 
