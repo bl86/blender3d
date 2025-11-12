@@ -191,13 +191,13 @@ def setup_camera(logo):
     """Setup camera with tracking"""
     print("  Setting up camera...")
 
-    bpy.ops.object.camera_add(location=(0, -25, 2))
+    bpy.ops.object.camera_add(location=(0, -18, 2))  # Closer to logo
     camera = bpy.context.active_object
     camera.name = "MainCamera"
-    camera.data.lens = 50
+    camera.data.lens = 35  # Wider lens to fill frame better
     camera.data.dof.use_dof = True
     camera.data.dof.aperture_fstop = 2.8
-    camera.data.dof.focus_distance = 25
+    camera.data.dof.focus_distance = 18  # Adjusted for new camera position
 
     # Track logo
     constraint = camera.constraints.new(type='TRACK_TO')
@@ -426,6 +426,39 @@ def configure_render():
     print("  ✓ Render configured")
 
 
+def bake_fire_simulation():
+    """Bake fluid simulation so fire renders properly"""
+    print("  Baking fire simulation...")
+    print("  ⚠️  This will take 2-5 minutes depending on your CPU")
+
+    try:
+        # Find domain object
+        domain = None
+        for obj in bpy.context.scene.objects:
+            if obj.name == "FireDomain":
+                domain = obj
+                break
+
+        if not domain:
+            print("  ⚠️  Warning: FireDomain not found, skipping bake")
+            return
+
+        # Select domain
+        bpy.ops.object.select_all(action='DESELECT')
+        domain.select_set(True)
+        bpy.context.view_layer.objects.active = domain
+
+        # Bake all
+        print("  🔥 Baking fluid cache (this takes time)...")
+        bpy.ops.fluid.bake_all()
+
+        print("  ✓ Fire simulation baked successfully")
+
+    except Exception as e:
+        print(f"  ⚠️  Baking failed: {e}")
+        print("  💡 You can bake manually in Blender: Physics Properties → Fluid → Bake All")
+
+
 def main():
     """Main setup function"""
     print("\n" + "=" * 75)
@@ -482,8 +515,12 @@ def main():
         print("\n[Step 9] Configuring render...")
         configure_render()
 
+        # Bake fire simulation
+        print("\n[Step 10] Baking fire simulation...")
+        bake_fire_simulation()
+
         # Save
-        print("\n[Step 10] Saving file...")
+        print("\n[Step 11] Saving file...")
         save_dir = os.path.dirname(svg_path)
         save_path = os.path.join(save_dir, "alter_logo_fire_animation.blend")
         bpy.ops.wm.save_as_mainfile(filepath=save_path)
@@ -493,12 +530,15 @@ def main():
         print("=" * 75)
         print(f"\n📁 Saved: {save_path}")
         print(f"🎬 Frames: 300 (10 seconds)")
-        print(f"🔥 Fire: Yes (fades at frame 200)")
+        print(f"🔥 Fire: BAKED and ready to render")
         print(f"📐 Resolution: 1920x1080")
         print(f"⚙️  Samples: 128")
+        print(f"📹 Camera: Optimized to fill screen with logo")
         print()
         print("▶️  To preview: Press SPACEBAR in viewport")
-        print("🎥 To render: Press Ctrl+F12")
+        print("🎥 To render: Press F12 (single frame) or Ctrl+F12 (animation)")
+        print()
+        print("💡 TIP: Logo fills screen at end of animation (frame 250-300)")
         print("=" * 75)
 
         return True
