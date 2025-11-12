@@ -155,13 +155,20 @@ def create_golden_material(logo):
     output = nodes.new('ShaderNodeOutputMaterial')
     output.location = (800, 0)
 
-    # Principled BSDF
+    # Principled BSDF - Reflective gold
     bsdf = nodes.new('ShaderNodeBsdfPrincipled')
     bsdf.location = (400, 0)
-    bsdf.inputs['Base Color'].default_value = (1.0, 0.766, 0.336, 1.0)
-    bsdf.inputs['Metallic'].default_value = 1.0
-    bsdf.inputs['Roughness'].default_value = 0.15
-    bsdf.inputs['Specular IOR Level'].default_value = 0.8
+    bsdf.inputs['Base Color'].default_value = (1.0, 0.766, 0.336, 1.0)  # Gold color
+    bsdf.inputs['Metallic'].default_value = 1.0  # Full metallic
+    bsdf.inputs['Roughness'].default_value = 0.08  # Very smooth for strong reflections
+    bsdf.inputs['Specular IOR Level'].default_value = 1.0  # Maximum specular
+
+    # Add anisotropic for brushed metal look (if available)
+    try:
+        bsdf.inputs['Anisotropic'].default_value = 0.3
+        bsdf.inputs['Anisotropic Rotation'].default_value = 0.25
+    except:
+        pass  # Not available in all Blender versions
 
     # Emission for glow
     emission = nodes.new('ShaderNodeEmission')
@@ -206,7 +213,17 @@ def setup_camera(logo):
     constraint.up_axis = 'UP_Y'
 
     bpy.context.scene.camera = camera
-    print("  ✓ Camera configured")
+
+    # Align viewport to camera view (so user sees render view)
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    # Set to camera view
+                    space.region_3d.view_perspective = 'CAMERA'
+                    break
+
+    print("  ✓ Camera configured and aligned to viewport")
     return camera
 
 
@@ -297,11 +314,16 @@ def create_fire_simulation(logo):
     emitter.name = "FireEmitter"
 
     # Scale up slightly so fire surrounds logo
-    emitter.scale = (1.15, 1.15, 1.15)
+    emitter.scale = (1.2, 1.2, 1.2)  # Bigger scale for better fire coverage
 
     # Parent to logo so it follows
     emitter.parent = logo
     emitter.matrix_parent_inverse = logo.matrix_world.inverted()
+
+    # Hide emitter completely - don't want to see duplicate logo
+    emitter.hide_render = True
+    emitter.hide_viewport = True  # Also hide in viewport
+    emitter.display_type = 'WIRE'  # Show only wireframe if visible
 
     # Add flow
     bpy.ops.object.modifier_add(type='FLUID')
@@ -332,8 +354,6 @@ def create_fire_simulation(logo):
     except (AttributeError, TypeError):
         # Keyframing might not work, try simple approach
         pass
-
-    emitter.hide_render = True
 
     # Fire material using Principled Volume for proper fire rendering
     mat = bpy.data.materials.new(name="FireMaterial")
@@ -413,17 +433,52 @@ def setup_lighting():
     rim = bpy.context.active_object
     rim.data.energy = 300
 
-    # Environment
+    # Environment - gradient for better reflections
     world = bpy.context.scene.world
     if not world:
         world = bpy.data.worlds.new("World")
         bpy.context.scene.world = world
     world.use_nodes = True
-    bg = world.node_tree.nodes['Background']
-    bg.inputs['Color'].default_value = (0.05, 0.05, 0.08, 1.0)
-    bg.inputs['Strength'].default_value = 0.5
 
-    print("  ✓ Lighting complete")
+    # Clear existing nodes
+    world_nodes = world.node_tree.nodes
+    world_links = world.node_tree.links
+    for node in world_nodes:
+        if node.type != 'OUTPUT_WORLD':
+            world_nodes.remove(node)
+
+    # Get output node
+    output = None
+    for node in world_nodes:
+        if node.type == 'OUTPUT_WORLD':
+            output = node
+            break
+
+    # Create sky texture for reflections
+    sky = world_nodes.new('ShaderNodeTexSky')
+    sky.location = (-300, 300)
+    sky.sky_type = 'NISHITA'
+    sky.sun_elevation = math.radians(45)
+    sky.sun_rotation = math.radians(90)
+    sky.ground_albedo = 0.3
+
+    # Background shader
+    bg = world_nodes.new('ShaderNodeBackground')
+    bg.location = (0, 300)
+    bg.inputs['Strength'].default_value = 1.0
+
+    # Mix with dark color for dramatic look
+    mix_rgb = world_nodes.new('ShaderNodeMixRGB')
+    mix_rgb.location = (-150, 300)
+    mix_rgb.blend_type = 'MULTIPLY'
+    mix_rgb.inputs[0].default_value = 0.3  # Mix factor
+    mix_rgb.inputs[2].default_value = (0.05, 0.05, 0.08, 1.0)  # Dark blue-gray
+
+    world_links.new(sky.outputs['Color'], mix_rgb.inputs[1])
+    world_links.new(mix_rgb.outputs[0], bg.inputs['Color'])
+    world_links.new(bg.outputs[0], output.inputs[0])
+
+    print("  ✓ Lighting complete with reflective environment")
 
 
 def configure_render():
