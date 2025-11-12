@@ -288,17 +288,18 @@ def create_fire_simulation(logo):
     domain_settings.cache_frame_start = 1
     domain_settings.cache_frame_end = 300
 
-    # Emitter (torus around logo) - encircles logo as it moves
-    bpy.ops.mesh.primitive_torus_add(
-        location=(0, 0, 0),
-        rotation=(0, 0, 0),  # No rotation - surrounds logo naturally
-        major_radius=4.0,  # Bigger radius to fully surround logo
-        minor_radius=1.0
-    )
+    # Emitter - duplicate logo shape so fire matches logo outline
+    bpy.ops.object.select_all(action='DESELECT')
+    logo.select_set(True)
+    bpy.context.view_layer.objects.active = logo
+    bpy.ops.object.duplicate()
     emitter = bpy.context.active_object
     emitter.name = "FireEmitter"
 
-    # Parent to logo
+    # Scale up slightly so fire surrounds logo
+    emitter.scale = (1.15, 1.15, 1.15)
+
+    # Parent to logo so it follows
     emitter.parent = logo
     emitter.matrix_parent_inverse = logo.matrix_world.inverted()
 
