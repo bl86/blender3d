@@ -24,8 +24,8 @@ def clean_scene():
 
 def import_svg_preserve_positions(svg_path):
     """
-    Import SVG and return elements with EXACT original positions
-    NO position changes, NO centering - keep everything as-is
+    Import SVG and measure ACTUAL world space positions via bounding box
+    This is the ONLY way to get real positions - location is always (0,0,0)
     """
     if not os.path.exists(svg_path):
         print(f"✗ SVG not found: {svg_path}")
@@ -42,14 +42,18 @@ def import_svg_preserve_positions(svg_path):
         return []
 
     print(f"✓ Imported {len(imported)} SVG elements")
+    print("\n  Measuring REAL positions from geometry...")
 
     elements = []
 
     for i, curve_obj in enumerate(imported):
-        # Store ORIGINAL position - this is sacred, never change it
-        original_position = curve_obj.location.copy()
+        # Get the bounding box center in WORLD SPACE before any changes
+        # This is where the element REALLY is in 3D space
+        bbox_center = sum((Vector(b) for b in curve_obj.bound_box), Vector()) / 8
+        world_center = curve_obj.matrix_world @ bbox_center
 
-        print(f"  Element {i}: Original position X={original_position.x:.3f}, Y={original_position.y:.3f}, Z={original_position.z:.3f}")
+        print(f"  Element {i} ({curve_obj.name}):")
+        print(f"    Real position: X={world_center.x:.3f}, Y={world_center.y:.3f}, Z={world_center.z:.3f}")
 
         # Convert curve to mesh (needed for rendering)
         bpy.context.view_layer.objects.active = curve_obj
@@ -62,13 +66,11 @@ def import_svg_preserve_positions(svg_path):
         solidify.thickness = 0.15
         solidify.offset = 0
 
-        # CRITICAL: Restore exact original position
-        mesh_obj.location = original_position.copy()
-
-        # Store original position as custom property for animation
-        mesh_obj["original_x"] = original_position.x
-        mesh_obj["original_y"] = original_position.y
-        mesh_obj["original_z"] = original_position.z
+        # DON'T move object - it's already in correct position from SVG import
+        # Just store the world center for animation reference
+        mesh_obj["world_center_x"] = world_center.x
+        mesh_obj["world_center_y"] = world_center.y
+        mesh_obj["world_center_z"] = world_center.z
 
         elements.append(mesh_obj)
 
@@ -195,45 +197,40 @@ def create_fire_for_element(element, index):
 def animate_sequential(elements):
     """
     Animate elements arriving one by one
-    Each element starts FAR on Y axis, arrives at ORIGINAL position
-    X and Z NEVER change - stay at original SVG positions
+    Elements start FAR on Y axis, arrive at current position
+    Only Y axis moves - X and Z stay as imported from SVG
     """
-    start_y = -50.0  # Far from camera
+    start_y_offset = -50.0  # How far to push elements back
     duration = 40  # Frames for each element to arrive
     gap = 25  # Gap between element starts
 
     print("\n✓ Animating elements sequentially:")
 
     for i, element in enumerate(elements):
-        # Get ORIGINAL position from custom properties
-        orig_x = element["original_x"]
-        orig_y = element["original_y"]
-        orig_z = element["original_z"]
+        # Get current position (where SVG import placed it)
+        current_x = element.location.x
+        current_y = element.location.y
+        current_z = element.location.z
 
         # Frame timing
         start_frame = 1 + (i * gap)
         end_frame = start_frame + duration
 
         print(f"  Element {i}: frames {start_frame}-{end_frame}")
-        print(f"    From Y={start_y} to Y={orig_y} (X={orig_x}, Z={orig_z} FIXED)")
+        print(f"    Current pos: X={current_x:.3f}, Y={current_y:.3f}, Z={current_z:.3f}")
+        print(f"    Will move from Y={current_y + start_y_offset:.3f} to Y={current_y:.3f}")
 
-        # START position - far away on Y, original X and Z
-        element.location.x = orig_x
-        element.location.y = start_y
-        element.location.z = orig_z
+        # START position - pushed back on Y axis only
+        element.location.x = current_x  # Keep X
+        element.location.y = current_y + start_y_offset  # Push back
+        element.location.z = current_z  # Keep Z
         element.keyframe_insert(data_path='location', frame=start_frame)
 
-        # END position - original position
-        element.location.x = orig_x
-        element.location.y = orig_y
-        element.location.z = orig_z
+        # END position - back to where it was after SVG import
+        element.location.x = current_x  # Keep X
+        element.location.y = current_y  # Return to original Y
+        element.location.z = current_z  # Keep Z
         element.keyframe_insert(data_path='location', frame=end_frame)
-
-        # Lock X and Z so they never move
-        element.keyframe_insert(data_path='location', index=0, frame=start_frame)  # X
-        element.keyframe_insert(data_path='location', index=0, frame=end_frame)    # X
-        element.keyframe_insert(data_path='location', index=2, frame=start_frame)  # Z
-        element.keyframe_insert(data_path='location', index=2, frame=end_frame)    # Z
 
         # Smooth animation
         if element.animation_data:
@@ -268,12 +265,7 @@ def create_banja_luka_text():
     solidify = text_obj.modifiers.new(name="Solidify", type='SOLIDIFY')
     solidify.thickness = 0.1
 
-    # Store original position
-    text_obj["original_x"] = 0
-    text_obj["original_y"] = 0
-    text_obj["original_z"] = -4
-
-    print("✓ BANJA LUKA text created")
+    print("✓ BANJA LUKA text created at (0, 0, -4)")
 
     return text_obj
 
