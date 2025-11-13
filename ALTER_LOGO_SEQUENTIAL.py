@@ -128,87 +128,125 @@ def separate_logo_into_elements(logo):
     return elements
 
 
-def create_fast_fire_material():
+def create_fire_domain(total_frames):
     """
-    Create fire material using EMISSION shader with noise
-    NO FLUID SIMULATION - instant, no baking needed
+    Create FLUID domain for fire simulation
+    ONE domain for all sequential elements
+    Adapted from ALTER_LOGO_COMPLETE.py
     """
-    mat = bpy.data.materials.new(name="FastFire")
-    mat.use_nodes = True
-    mat.blend_method = 'BLEND'
-    mat.shadow_method = 'NONE'
+    print("  Creating fire domain...")
 
+    # Domain - large enough to cover all elements
+    # Positioned at center (0, 0, 0) to cover all animated elements
+    bpy.ops.mesh.primitive_cube_add(size=20, location=(0, 0, 0))
+    domain = bpy.context.active_object
+    domain.name = "FireDomain"
+    domain.display_type = 'WIRE'  # Show as wireframe in viewport
+
+    # Add fluid modifier
+    bpy.ops.object.modifier_add(type='FLUID')
+    domain.modifiers["Fluid"].fluid_type = 'DOMAIN'
+    domain_settings = domain.modifiers["Fluid"].domain_settings
+
+    # Configure domain
+    domain_settings.domain_type = 'GAS'
+    domain_settings.resolution_max = 128  # Reduced from 256 for faster baking
+
+    # Noise settings (optional - can disable for speed)
+    try:
+        domain_settings.use_noise = False  # Disabled for faster baking
+        domain_settings.noise_scale = 2
+    except:
+        pass  # Noise not available in this version
+
+    # Fire settings (Blender 4.5+ compatibility)
+    try:
+        domain_settings.use_fire = True
+    except AttributeError:
+        pass  # use_fire removed in Blender 4.5+, fire is automatic with FIRE flow type
+
+    try:
+        domain_settings.alpha = 1.0
+        domain_settings.beta = 1.0
+    except AttributeError:
+        pass  # alpha/beta removed in newer versions
+
+    try:
+        domain_settings.vorticity = 0.3
+    except AttributeError:
+        pass  # vorticity might not be available
+
+    # Cache - bake for entire animation
+    domain_settings.cache_frame_start = 1
+    domain_settings.cache_frame_end = total_frames
+
+    # Fire material using Principled Volume
+    mat = bpy.data.materials.new(name="FireMaterial")
+    mat.use_nodes = True
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     nodes.clear()
 
-    # Output
     output = nodes.new('ShaderNodeOutputMaterial')
-    output.location = (800, 0)
+    output.location = (600, 0)
 
-    # Mix shader for transparency
-    mix = nodes.new('ShaderNodeMixShader')
-    mix.location = (600, 0)
-    links.new(mix.outputs[0], output.inputs[0])
+    # Principled Volume - proper fire/smoke rendering
+    volume = nodes.new('ShaderNodeVolumePrincipled')
+    volume.location = (200, 0)
 
-    # Transparent for areas without fire
-    transparent = nodes.new('ShaderNodeBsdfTransparent')
-    transparent.location = (400, -100)
-    links.new(transparent.outputs[0], mix.inputs[1])
+    # Fire attributes
+    flame_attr = nodes.new('ShaderNodeAttribute')
+    flame_attr.location = (-200, 200)
+    flame_attr.attribute_name = 'flame'
 
-    # Emission for fire glow (BRIGHT so it's visible!)
-    emission = nodes.new('ShaderNodeEmission')
-    emission.location = (400, 100)
-    emission.inputs['Strength'].default_value = 20.0  # Increased from 5.0 to 20.0 for visibility
-    links.new(emission.outputs[0], mix.inputs[2])
+    density_attr = nodes.new('ShaderNodeAttribute')
+    density_attr.location = (-200, -100)
+    density_attr.attribute_name = 'density'
 
-    # ColorRamp for fire colors (black to red to orange to yellow)
-    colorramp = nodes.new('ShaderNodeValToRGB')
-    colorramp.location = (200, 100)
-    links.new(colorramp.outputs[0], emission.inputs['Color'])
-    links.new(colorramp.outputs[1], mix.inputs[0])  # Alpha for transparency
+    # Color ramp for fire color
+    color_ramp = nodes.new('ShaderNodeValToRGB')
+    color_ramp.location = (0, 200)
+    color_ramp.color_ramp.elements[0].position = 0.0
+    color_ramp.color_ramp.elements[0].color = (0, 0, 0, 1)
+    color_ramp.color_ramp.elements[1].position = 1.0
+    color_ramp.color_ramp.elements[1].color = (1, 0.8, 0.1, 1)  # Yellow-orange
 
-    # Set fire color gradient
-    colorramp.color_ramp.elements[0].position = 0.0
-    colorramp.color_ramp.elements[0].color = (0, 0, 0, 1)  # Black
-    colorramp.color_ramp.elements.new(0.3)
-    colorramp.color_ramp.elements[1].color = (0.8, 0.1, 0.0, 1)  # Red
-    colorramp.color_ramp.elements.new(0.6)
-    colorramp.color_ramp.elements[2].color = (1.0, 0.4, 0.0, 1)  # Orange
-    colorramp.color_ramp.elements.new(0.9)
-    colorramp.color_ramp.elements[3].color = (1.0, 0.9, 0.3, 1)  # Yellow
+    # Add red color point
+    color_ramp.color_ramp.elements.new(0.5)
+    color_ramp.color_ramp.elements[1].color = (1, 0.3, 0.05, 1)  # Red-orange
 
-    # Noise texture for fire animation
-    noise = nodes.new('ShaderNodeTexNoise')
-    noise.location = (0, 100)
-    noise.inputs['Scale'].default_value = 15.0
-    noise.inputs['Detail'].default_value = 4.0
-    noise.inputs['Roughness'].default_value = 0.6
-    links.new(noise.outputs['Fac'], colorramp.inputs[0])
+    # Connect attributes
+    links.new(flame_attr.outputs['Fac'], color_ramp.inputs['Fac'])
+    links.new(color_ramp.outputs['Color'], volume.inputs['Color'])
+    links.new(flame_attr.outputs['Fac'], volume.inputs['Emission Strength'])
+    links.new(density_attr.outputs['Fac'], volume.inputs['Density'])
+    links.new(volume.outputs['Volume'], output.inputs['Volume'])
 
-    # Texture coordinate for noise
-    texcoord = nodes.new('ShaderNodeTexCoord')
-    texcoord.location = (-400, 100)
+    # Adjust volume properties for strong, visible fire
+    volume.inputs['Density'].default_value = 2.0
+    volume.inputs['Emission Strength'].default_value = 10.0
+    volume.inputs['Blackbody Intensity'].default_value = 1.0
+    volume.inputs['Blackbody Tint'].default_value = (1.0, 0.8, 0.5, 1.0)
 
-    # Mapping for animation
-    mapping = nodes.new('ShaderNodeMapping')
-    mapping.location = (-200, 100)
-    links.new(texcoord.outputs['Object'], mapping.inputs[0])
-    links.new(mapping.outputs[0], noise.inputs['Vector'])
+    # Apply material to domain
+    if domain.data.materials:
+        domain.data.materials[0] = mat
+    else:
+        domain.data.materials.append(mat)
 
-    # Add driver for animation - move noise up over time
-    driver = mapping.inputs['Location'].driver_add('default_value', 2)  # Z axis
-    driver.driver.expression = "frame * 0.1"
+    # Make sure domain is visible in render
+    domain.hide_render = False
+    domain.hide_viewport = False
 
-    print("✓ Fast fire material created (NO baking needed)")
-
-    return mat
+    print("  ✓ Fire domain created (FLUID simulation)")
+    return domain
 
 
-def create_fire_for_element(element, index):
+def create_fire_emitter_for_element(element, index, start_frame, end_frame):
     """
-    Create fast fire effect using wireframe + emission shader
-    NO FLUID - instant setup, no baking
+    Create FLUID fire emitter for one element
+    Emitter follows element and has timed fire flow
+    Adapted from ALTER_LOGO_COMPLETE.py
     """
     # Duplicate element for fire emitter
     bpy.ops.object.select_all(action='DESELECT')
@@ -219,38 +257,61 @@ def create_fire_for_element(element, index):
     emitter = bpy.context.active_object
     emitter.name = f"FireEmitter_{index}"
 
-    # Wireframe modifier - fire along edges
-    wireframe = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
-    wireframe.thickness = 0.15
-    wireframe.use_replace = True
-    wireframe.use_boundary = True
+    # Add Wireframe modifier to emit fire from element edges/contours
+    wireframe_mod = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
+    wireframe_mod.thickness = 0.08  # Thin wireframe around element contours
+    wireframe_mod.use_replace = True  # Replace mesh with wireframe
+    wireframe_mod.use_boundary = True  # Include boundary edges
+    wireframe_mod.use_even_offset = True
 
-    # Apply wireframe modifier so emission shader works on the geometry
-    bpy.ops.object.select_all(action='DESELECT')
-    emitter.select_set(True)
-    bpy.context.view_layer.objects.active = emitter
-    bpy.ops.object.modifier_apply(modifier="Wireframe")
+    # Apply modifiers so fluid system sees the wireframe
+    bpy.ops.object.convert(target='MESH')
 
-    # Parent to element
+    # Parent to element so it follows
     emitter.parent = element
     emitter.matrix_parent_inverse = element.matrix_world.inverted()
 
-    # Apply fast fire material
-    fire_mat = bpy.data.materials.get("FastFire")
-    if not fire_mat:
-        fire_mat = create_fast_fire_material()
+    # Add FLUID flow (must be done BEFORE hiding the object)
+    bpy.ops.object.modifier_add(type='FLUID')
+    emitter.modifiers["Fluid"].fluid_type = 'FLOW'
+    flow = emitter.modifiers["Fluid"].flow_settings
+    flow.flow_type = 'FIRE'
+    flow.flow_behavior = 'INFLOW'
 
-    if len(emitter.data.materials):
-        emitter.data.materials[0] = fire_mat
-    else:
-        emitter.data.materials.append(fire_mat)
+    # Fire properties (compatibility with different Blender versions)
+    try:
+        flow.fuel_amount = 2.0
+    except AttributeError:
+        pass  # fuel_amount not available
 
-    # DON'T hide emitter - we want to see the fire!
-    # The emission shader creates the glow effect
-    emitter.hide_render = False  # VISIBLE in render
-    emitter.hide_viewport = False  # VISIBLE in viewport
+    try:
+        flow.temperature = 3.0
+    except AttributeError:
+        pass  # temperature not available
 
-    print(f"    ✓ Fire emitter created (visible, wireframe applied)")
+    # Animate fire timing - fire appears during element animation
+    try:
+        # Fire starts when element starts moving
+        flow.density = 1.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=start_frame)
+
+        # Fire stays during animation
+        flow.density = 1.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=end_frame)
+
+        # Fire fades shortly after element arrives
+        flow.density = 0.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=end_frame + 30)
+    except (AttributeError, TypeError):
+        # Keyframing might not work, fire will stay on throughout
+        pass
+
+    # Hide emitter completely - don't want to see wireframe (AFTER adding modifiers)
+    emitter.hide_render = True
+    emitter.hide_viewport = True
+    emitter.display_type = 'WIRE'  # Show only wireframe if visible
+
+    print(f"    ✓ FLUID emitter {index} created (frames {start_frame}-{end_frame+30})")
 
     return emitter
 
@@ -260,12 +321,15 @@ def animate_sequential(elements):
     Animate elements arriving one by one
     Elements start FAR on Y axis, arrive at current position
     Only Y axis moves - X and Z stay as imported from SVG
+    Returns: (total_frames, element_timings)
     """
     start_y_offset = -50.0  # How far to push elements back
     duration = 40  # Frames for each element to arrive
     gap = 25  # Gap between element starts
 
     print("\n✓ Animating elements sequentially:")
+
+    element_timings = []  # Track (start_frame, end_frame) for each element
 
     for i, element in enumerate(elements):
         # Get current position (where SVG import placed it)
@@ -276,6 +340,7 @@ def animate_sequential(elements):
         # Frame timing
         start_frame = 1 + (i * gap)
         end_frame = start_frame + duration
+        element_timings.append((start_frame, end_frame))
 
         print(f"  Element {i}: frames {start_frame}-{end_frame}")
         print(f"    Current pos: X={current_x:.3f}, Y={current_y:.3f}, Z={current_z:.3f}")
@@ -306,7 +371,7 @@ def animate_sequential(elements):
 
     print(f"\n✓ Animation setup complete - {total_frames} frames total")
 
-    return total_frames
+    return total_frames, element_timings
 
 
 def create_banja_luka_text():
@@ -438,7 +503,7 @@ def main():
     """Main execution"""
     print("\n" + "="*60)
     print("ALTER LOGO - SEQUENTIAL ANIMATION")
-    print("NO FLUID BAKING - Fast emission shader fire")
+    print("FLUID FIRE SIMULATION - Like ALTER_LOGO_COMPLETE")
     print("Preserves exact SVG positions")
     print("="*60 + "\n")
 
@@ -489,22 +554,24 @@ def main():
 
     # Animate elements
     print("\nStep 4: Setting up sequential animation...")
-    total_frames = animate_sequential(elements)
+    total_frames, element_timings = animate_sequential(elements)
 
-    # Add fast fire to each element
-    print("\nStep 5: Adding FAST fire effects (no baking)...")
-    fire_mat = create_fast_fire_material()
+    # Create FLUID fire domain (ONE for all elements)
+    print("\nStep 5: Creating FLUID fire domain...")
+    domain = create_fire_domain(total_frames)
 
+    # Add FLUID fire emitter for each element
+    print("\nStep 6: Adding FLUID fire emitters for each element...")
     for i, elem in enumerate(elements):
-        emitter = create_fire_for_element(elem, i)
-        print(f"  ✓ Fire emitter {i} created (instant, no baking)")
+        start_frame, end_frame = element_timings[i]
+        emitter = create_fire_emitter_for_element(elem, i, start_frame, end_frame)
 
     # Setup scene
-    print("\nStep 6: Setting up camera, lights, render...")
+    print("\nStep 7: Setting up camera, lights, render...")
     setup_scene(total_frames)
 
     # Save
-    output_path = os.path.join(os.path.dirname(__file__), "alter_logo_sequential_FAST.blend")
+    output_path = os.path.join(os.path.dirname(__file__), "alter_logo_sequential.blend")
     bpy.ops.wm.save_as_mainfile(filepath=output_path)
 
     print("\n" + "="*60)
@@ -513,29 +580,37 @@ def main():
     print(f"\n📁 Saved: {output_path}")
     print(f"🎬 Total frames: {total_frames}")
     print(f"⏱️  Duration: ~{total_frames/30:.1f} seconds at 30fps")
-    print("\n🔥 FIRE: Emission shader - NO BAKING NEEDED!")
-    print("   Emission strength: 20.0 (VERY visible)")
-    print("   Material: FastFire (applied to all emitters)")
-    print("   Wireframe: Applied (fire along element edges)")
+    print(f"🔥 Elements with FLUID fire: {len(elements)}")
+    print("\n🔥 FIRE: FLUID simulation (Mantaflow)")
+    print("   Fire type: FIRE flow on wireframe emitters")
+    print("   Domain resolution: 128 (optimized for speed)")
+    print("   Noise: Disabled (faster baking)")
+    print("   Material: Principled Volume with flame attributes")
+    print("   Emitters: Hidden (domain visible)")
     print()
-    print("⚠️  IMPORTANT - TO SEE FIRE IN BLENDER:")
+    print("⚠️  IMPORTANT - BAKING REQUIRED:")
     print("   1. Open the .blend file")
-    print("   2. Press 'Z' key in viewport")
-    print("   3. Select 'Rendered' mode")
-    print("   4. Fire should be visible immediately!")
+    print("   2. Go to frame 1")
+    print("   3. Press SPACEBAR to play animation")
+    print("   4. Blender will BAKE the fluid simulation automatically")
+    print("   5. Wait for baking to complete (progress shown in timeline)")
+    print("   6. Fire will appear after baking completes")
     print()
-    print("   OR just render with F12 - fire will be in render!")
+    print("   To see fire during baking:")
+    print("   • Press 'Z' key and select 'Rendered' mode")
+    print("   • Fire will become visible as frames are baked")
     print()
     print("\n✨ Features:")
     print("   • Elements preserve EXACT SVG positions")
     print("   • Only Y axis (depth) animates")
     print("   • X and Z stay at original positions")
-    print("   • Fast fire with animated noise texture")
-    print("   • Fire emitters are VISIBLE (not hidden)")
-    print("   • Emission strength: 20.0 for high visibility")
+    print("   • FLUID fire simulation (like ALTER_LOGO_COMPLETE)")
+    print("   • Fire timed to each element's animation")
+    print("   • Fire fades 30 frames after element arrives")
     print()
-    print("💡 Press SPACEBAR to preview animation")
-    print("   Press F12 to render (fire will be visible!)")
+    print("💡 After baking completes:")
+    print("   • Press SPACEBAR to preview animation")
+    print("   • Press F12 to render (fire will be visible!)")
     print()
 
 
