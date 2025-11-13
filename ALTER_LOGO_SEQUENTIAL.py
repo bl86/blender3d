@@ -22,69 +22,108 @@ def clean_scene():
     print("✓ Scene cleaned")
 
 
-def import_svg_preserve_positions(svg_path):
+def import_svg_as_one_logo(svg_path):
     """
-    Import SVG and keep each element separate WITHOUT moving origin
-    This preserves the exact SVG layout
+    Import SVG exactly like ALTER_LOGO_COMPLETE.py does
+    Join all curves into ONE object, center it, then separate for sequential
     """
     if not os.path.exists(svg_path):
         print(f"✗ SVG not found: {svg_path}")
-        return []
+        return None
 
-    # Get objects before import
-    objects_before = set(bpy.data.objects)
+    # Store existing objects
+    existing_objects = set(bpy.context.scene.objects)
+
+    # Deselect all
+    bpy.ops.object.select_all(action='DESELECT')
 
     # Import SVG
-    bpy.ops.import_curve.svg(filepath=svg_path)
+    result = bpy.ops.import_curve.svg(filepath=svg_path)
 
-    # Get NEW objects after import
-    objects_after = set(bpy.data.objects)
-    imported = list(objects_after - objects_before)
+    if result != {'FINISHED'}:
+        print("✗ SVG import failed")
+        return None
 
-    # Filter for curves only
-    imported = [obj for obj in imported if obj.type == 'CURVE']
+    # Find new objects
+    new_objects = set(bpy.context.scene.objects) - existing_objects
+    curves = [obj for obj in new_objects if obj.type == 'CURVE']
 
-    if not imported:
-        print("✗ No curves imported from SVG")
-        print(f"   SVG path: {svg_path}")
-        print(f"   Objects before: {len(objects_before)}")
-        print(f"   Objects after: {len(objects_after)}")
-        return []
+    if not curves:
+        print("✗ No curves found after import")
+        return None
 
-    print(f"✓ Imported {len(imported)} SVG elements")
+    print(f"✓ Imported {len(curves)} curve(s)")
 
-    elements = []
+    # Select all curves
+    for obj in curves:
+        obj.select_set(True)
 
-    for i, curve_obj in enumerate(imported):
-        # CRITICAL: Must deselect all and select only this object for convert
-        bpy.ops.object.select_all(action='DESELECT')
-        curve_obj.select_set(True)
-        bpy.context.view_layer.objects.active = curve_obj
+    # Set active
+    bpy.context.view_layer.objects.active = curves[0]
 
-        # Add minimal extrude for 3D (like ALTER_LOGO_COMPLETE)
-        curve_obj.data.extrude = 0.005
-        curve_obj.data.bevel_depth = 0.0
+    # JOIN all curves into ONE object (like ALTER_LOGO_COMPLETE)
+    if len(curves) > 1:
+        print(f"  Joining {len(curves)} curves into one logo...")
+        bpy.ops.object.join()
 
-        # Convert curve to mesh
-        bpy.ops.object.convert(target='MESH')
-        mesh_obj = bpy.context.active_object
-        mesh_obj.name = f"LogoElement_{i}"
+    logo = bpy.context.active_object
+    logo.name = "AlterLogoUnified"
 
-        # DON'T USE origin_set - it moves elements to wrong positions!
-        # Leave geometry exactly as imported from SVG
+    # Add minimal extrude
+    logo.data.extrude = 0.005
+    logo.data.bevel_depth = 0.0
+    logo.data.bevel_resolution = 0
 
-        # Store original location for animation
-        mesh_obj["svg_original_loc"] = (mesh_obj.location.x, mesh_obj.location.y, mesh_obj.location.z)
+    # Convert to mesh
+    print("  Converting to mesh...")
+    bpy.ops.object.convert(target='MESH')
 
-        print(f"  Element {i} ({mesh_obj.name}):")
-        print(f"    Location: X={mesh_obj.location.x:.3f}, Y={mesh_obj.location.y:.3f}, Z={mesh_obj.location.z:.3f}")
+    logo = bpy.context.active_object
+    logo.name = "AlterLogoUnified"
 
-        # Add solidify for thickness
-        solidify = mesh_obj.modifiers.new(name="Solidify", type='SOLIDIFY')
+    # Center and scale (like ALTER_LOGO_COMPLETE)
+    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+    logo.location = (0, 0, 0)
+    logo.scale = (2.5, 2.5, 2.5)
+    bpy.ops.object.transform_apply(scale=True)
+
+    # Rotate to face camera
+    logo.rotation_euler = (1.5708, 0, 0)  # 90 degrees X
+    bpy.ops.object.transform_apply(rotation=True)
+
+    print(f"  ✓ Unified logo ready: {logo.name}")
+    return logo
+
+
+def separate_logo_into_elements(logo):
+    """
+    Separate the unified logo into individual elements by loose parts
+    Each loose part becomes a separate object for sequential animation
+    """
+    print("\n  Separating logo into elements...")
+
+    # Select and set active
+    bpy.ops.object.select_all(action='DESELECT')
+    logo.select_set(True)
+    bpy.context.view_layer.objects.active = logo
+
+    # Separate by loose parts
+    bpy.ops.mesh.separate(type='LOOSE')
+
+    # Get all objects that were created from separation
+    elements = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+
+    print(f"  ✓ Separated into {len(elements)} elements")
+
+    # Name them
+    for i, elem in enumerate(elements):
+        elem.name = f"LogoElement_{i}"
+        print(f"    Element {i}: {elem.name} at {elem.location}")
+
+        # Add solidify for better thickness
+        solidify = elem.modifiers.new(name="Solidify", type='SOLIDIFY')
         solidify.thickness = 0.05
         solidify.offset = 0
-
-        elements.append(mesh_obj)
 
     return elements
 
@@ -347,6 +386,14 @@ def setup_scene(total_frames):
     scene.frame_start = 1
     scene.frame_end = total_frames
 
+    # Output path - save in 'output' folder next to blend file (Windows compatible)
+    blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else os.getcwd()
+    output_dir = os.path.join(blend_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+    scene.render.filepath = os.path.join(output_dir, "frame_")
+    scene.render.image_settings.file_format = 'PNG'
+
+    print(f"  ✓ Render output: {output_dir}")
     print("  ✓ Render engine: CYCLES (required for emission shader fire)")
 
     # Cycles settings - GPU optimization
@@ -406,12 +453,20 @@ def main():
     # Clean scene
     clean_scene()
 
-    # Import SVG - preserve exact positions
-    print("Step 1: Importing SVG (preserving positions)...")
-    elements = import_svg_preserve_positions(svg_path)
+    # Import SVG as unified logo (like ALTER_LOGO_COMPLETE)
+    print("Step 1: Importing and unifying SVG...")
+    logo = import_svg_as_one_logo(svg_path)
+
+    if not logo:
+        print("✗ Failed to import logo")
+        return
+
+    # Separate into individual elements
+    print("Step 2: Separating into elements...")
+    elements = separate_logo_into_elements(logo)
 
     if not elements:
-        print("✗ Failed to import elements")
+        print("✗ Failed to separate elements")
         return
 
     # Add materials to elements
@@ -423,7 +478,7 @@ def main():
             elem.data.materials.append(logo_mat)
 
     # Add BANJA LUKA text
-    print("\nStep 2: Creating BANJA LUKA text...")
+    print("\nStep 3: Creating BANJA LUKA text...")
     banja_luka = create_banja_luka_text()
     elements.append(banja_luka)
 
@@ -433,11 +488,11 @@ def main():
         banja_luka.data.materials.append(logo_mat)
 
     # Animate elements
-    print("\nStep 3: Setting up sequential animation...")
+    print("\nStep 4: Setting up sequential animation...")
     total_frames = animate_sequential(elements)
 
     # Add fast fire to each element
-    print("\nStep 4: Adding FAST fire effects (no baking)...")
+    print("\nStep 5: Adding FAST fire effects (no baking)...")
     fire_mat = create_fast_fire_material()
 
     for i, elem in enumerate(elements):
@@ -445,7 +500,7 @@ def main():
         print(f"  ✓ Fire emitter {i} created (instant, no baking)")
 
     # Setup scene
-    print("\nStep 5: Setting up camera, lights, render...")
+    print("\nStep 6: Setting up camera, lights, render...")
     setup_scene(total_frames)
 
     # Save
