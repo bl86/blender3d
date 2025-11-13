@@ -31,14 +31,24 @@ def import_svg_preserve_positions(svg_path):
         print(f"✗ SVG not found: {svg_path}")
         return []
 
+    # Get objects before import
+    objects_before = set(bpy.data.objects)
+
     # Import SVG
     bpy.ops.import_curve.svg(filepath=svg_path)
 
-    # Get all imported curve objects
-    imported = [obj for obj in bpy.context.selected_objects if obj.type == 'CURVE']
+    # Get NEW objects after import (what was just imported)
+    objects_after = set(bpy.data.objects)
+    imported = list(objects_after - objects_before)
+
+    # Filter for curves only
+    imported = [obj for obj in imported if obj.type == 'CURVE']
 
     if not imported:
         print("✗ No curves imported from SVG")
+        print(f"   SVG path: {svg_path}")
+        print(f"   Objects before: {len(objects_before)}")
+        print(f"   Objects after: {len(objects_after)}")
         return []
 
     print(f"✓ Imported {len(imported)} SVG elements")
