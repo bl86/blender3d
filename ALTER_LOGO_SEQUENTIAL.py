@@ -1,18 +1,19 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-ALTER LOGO - SEQUENTIAL FIRE ANIMATION
+ALTER LOGO - SEQUENTIAL FIRE ANIMATION V3
 ═══════════════════════════════════════════════════════════════════════════════
 
-REQUIREMENTS FROM USER:
+REQUIREMENTS FROM USER (CORRECTED):
 1. NO bevel - only small extrude for 3D effect
 2. Animation TOWARD camera (not from behind)
 3. Elements: Individual letters (A, L, T, E, R) + ego + treble key + "banja luka"
-4. Fire ONLY in last 2 seconds, then blank
-5. Alpha channel for compositing in Premiere
-6. Must work in ONE GO - senior developer approach
+4. Fire FROM START, EXTINGUISHES in last 2 seconds (CORRECTED!)
+5. Smoke disperses, logo remains with GLOW on transparent background
+6. Alpha channel for compositing in Premiere
+7. Fast execution - optimized for speed
 
 HOW TO USE:
-blender --background --python ALTER_LOGO_SEQUENTIAL_V2.py
+blender --background --python ALTER_LOGO_SEQUENTIAL.py
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -184,7 +185,7 @@ def create_banja_luka_text():
 
 
 def create_logo_material():
-    """Create golden metallic material for logo elements"""
+    """Create golden metallic material with GLOW for logo elements"""
     mat = bpy.data.materials.new(name="GoldenMetal")
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
@@ -192,15 +193,28 @@ def create_logo_material():
     nodes.clear()
 
     output = nodes.new('ShaderNodeOutputMaterial')
-    output.location = (400, 0)
+    output.location = (600, 0)
 
+    # Mix shader to combine metallic and emission
+    mix = nodes.new('ShaderNodeMixShader')
+    mix.location = (400, 0)
+    mix.inputs[0].default_value = 0.85  # 85% metallic, 15% emission glow
+    links.new(mix.outputs['Shader'], output.inputs['Surface'])
+
+    # Metallic gold BSDF
     bsdf = nodes.new('ShaderNodeBsdfPrincipled')
-    bsdf.location = (0, 0)
+    bsdf.location = (0, 100)
     bsdf.inputs['Base Color'].default_value = (1.0, 0.766, 0.336, 1.0)  # Gold
     bsdf.inputs['Metallic'].default_value = 1.0
     bsdf.inputs['Roughness'].default_value = 0.1
+    links.new(bsdf.outputs['BSDF'], mix.inputs[1])
 
-    links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+    # Emission for GLOW (logo remains visible after fire extinguishes)
+    emission = nodes.new('ShaderNodeEmission')
+    emission.location = (0, -100)
+    emission.inputs['Color'].default_value = (1.0, 0.85, 0.4, 1.0)  # Warm golden glow
+    emission.inputs['Strength'].default_value = 0.8  # Moderate glow strength
+    links.new(emission.outputs['Emission'], mix.inputs[2])
 
     return mat
 
@@ -209,22 +223,24 @@ def animate_elements_sequential(elements, total_duration=180):
     """
     Animate elements sequentially TOWARD camera
     Elements start FAR (positive Y) and move NEAR (negative Y)
-    Fire only in LAST 2 SECONDS (60 frames at 30fps)
+    Fire FROM START, extinguishes in LAST 2 SECONDS
 
-    Returns: (total_frames, fire_start_frame, element_timings)
+    Returns: (total_frames, fire_end_frame, element_timings)
     """
     print("\nAnimating elements TOWARD camera...")
 
     frames_per_element = 30  # Each element takes 30 frames to arrive
     gap_between_elements = 15  # Gap between element starts
 
-    # Calculate when fire should start (last 2 seconds = 60 frames)
-    fire_duration = 60  # 2 seconds at 30fps
+    # Fire FROM START, extinguishes in last 2 seconds
+    fire_extinguish_duration = 60  # Last 2 seconds at 30fps
     total_frames = total_duration
-    fire_start_frame = total_frames - fire_duration
+    fire_end_frame = total_frames - fire_extinguish_duration  # Fire stops at frame 120
+    fire_start_frame = 1  # Fire starts from beginning
 
     print(f"  Total animation: {total_frames} frames ({total_frames/30:.1f} seconds)")
-    print(f"  Fire starts at frame {fire_start_frame} (last {fire_duration/30:.1f} seconds)")
+    print(f"  Fire active: frames {fire_start_frame}-{fire_end_frame}")
+    print(f"  Fire extinguishes: frames {fire_end_frame}-{total_frames} ({fire_extinguish_duration/30:.1f} seconds)")
 
     element_timings = []
 
@@ -269,15 +285,15 @@ def animate_elements_sequential(elements, total_duration=180):
     bpy.context.scene.frame_end = total_frames
 
     print(f"✓ Animation complete: {len(elements)} elements")
-    print(f"✓ Fire timing: frames {fire_start_frame}-{total_frames}")
+    print(f"✓ Fire timing: frames 1-{fire_end_frame}, extinguishes {fire_end_frame}-{total_frames}")
 
-    return total_frames, fire_start_frame, element_timings
+    return total_frames, fire_end_frame, element_timings
 
 
-def create_fire_domain(total_frames, fire_start_frame):
+def create_fire_domain(total_frames, fire_end_frame):
     """
     Create FLUID fire domain
-    Fire only appears during specified frame range
+    Fire FROM START, extinguishes at fire_end_frame, disperses until total_frames
     """
     print("\nCreating FLUID fire domain...")
 
@@ -294,13 +310,14 @@ def create_fire_domain(total_frames, fire_start_frame):
 
     # Configure for fire
     domain_settings.domain_type = 'GAS'
-    domain_settings.resolution_max = 256  # Higher resolution for better fire
+    domain_settings.resolution_max = 128  # Lower resolution for FASTER baking
+    domain_settings.use_adaptive_domain = True  # Optimize domain size
 
-    # Cache only for fire frames
-    domain_settings.cache_frame_start = fire_start_frame
+    # Cache from START (fire active from beginning)
+    domain_settings.cache_frame_start = 1
     domain_settings.cache_frame_end = total_frames
 
-    # Disable noise for faster baking
+    # Disable noise for MUCH faster baking
     try:
         domain_settings.use_noise = False
     except:
@@ -362,15 +379,15 @@ def create_fire_domain(total_frames, fire_start_frame):
     domain.hide_render = False
     domain.hide_viewport = False
 
-    print(f"✓ Fire domain created (frames {fire_start_frame}-{total_frames})")
+    print(f"✓ Fire domain created (frames 1-{total_frames}, fire extinguishes at {fire_end_frame})")
 
     return domain
 
 
-def create_fire_emitter_for_element(element, index, fire_start_frame, fire_end_frame):
+def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames):
     """
     Create FLUID fire emitter for element
-    Fire only active during specified frame range
+    Fire active FROM START, extinguishes at fire_end_frame, disperses until total_frames
     """
     # Duplicate element for emitter
     bpy.ops.object.select_all(action='DESELECT')
@@ -412,17 +429,17 @@ def create_fire_emitter_for_element(element, index, fire_start_frame, fire_end_f
     except:
         pass
 
-    # Animate fire - only active during fire frame range
+    # Animate fire - active FROM START, extinguishes at fire_end_frame
     try:
-        # Before fire starts - no emission
-        flow.use_flow = False
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=fire_start_frame - 1)
-
-        # Fire starts
+        # Fire starts FROM BEGINNING
         flow.use_flow = True
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=fire_start_frame)
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=1)
 
-        # Fire ends
+        # Fire stays active
+        flow.use_flow = True
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=fire_end_frame - 1)
+
+        # Fire EXTINGUISHES (stops emitting, smoke disperses)
         flow.use_flow = False
         emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=fire_end_frame)
     except:
@@ -433,7 +450,7 @@ def create_fire_emitter_for_element(element, index, fire_start_frame, fire_end_f
     emitter.hide_render = True
     emitter.hide_viewport = True
 
-    print(f"  ✓ Fire emitter {index:02d} (frames {fire_start_frame}-{fire_end_frame})")
+    print(f"  ✓ Fire emitter {index:02d} (active frames 1-{fire_end_frame}, extinguishes {fire_end_frame}-{total_frames})")
 
     return emitter
 
@@ -544,13 +561,15 @@ def setup_render_settings(total_frames):
 def main():
     """Main execution - SENIOR DEVELOPER APPROACH"""
     print("\n" + "="*70)
-    print("ALTER LOGO - SEQUENTIAL FIRE ANIMATION (V2)")
+    print("ALTER LOGO - SEQUENTIAL FIRE ANIMATION (V3)")
     print("="*70)
-    print("\nREQUIREMENTS:")
+    print("\nREQUIREMENTS (CORRECTED):")
     print("  • NO bevel - only small extrude")
     print("  • Animation TOWARD camera")
-    print("  • Fire ONLY last 2 seconds")
+    print("  • Fire FROM START, EXTINGUISHES in last 2 seconds")
+    print("  • Smoke disperses, logo GLOWS on transparent background")
     print("  • Alpha channel for Premiere")
+    print("  • Optimized for SPEED (no long baking)")
     print("="*70 + "\n")
 
     # Find SVG
@@ -593,16 +612,15 @@ def main():
     elements.append(banja_luka)
 
     # Animate elements
-    total_frames, fire_start_frame, element_timings = animate_elements_sequential(elements)
+    total_frames, fire_end_frame, element_timings = animate_elements_sequential(elements)
 
-    # Create fire domain
-    fire_end_frame = total_frames
-    domain = create_fire_domain(total_frames, fire_start_frame)
+    # Create fire domain (fire FROM START, extinguishes at fire_end_frame)
+    domain = create_fire_domain(total_frames, fire_end_frame)
 
     # Create fire emitters for each element
     print("\nCreating FLUID fire emitters...")
     for i, elem in enumerate(elements):
-        create_fire_emitter_for_element(elem, i, fire_start_frame, fire_end_frame)
+        create_fire_emitter_for_element(elem, i, fire_end_frame, total_frames)
 
     # Setup camera and lights
     setup_camera_and_lights()
@@ -619,16 +637,23 @@ def main():
     print("="*70)
     print(f"\n📁 Saved: {output_path}")
     print(f"🎬 Frames: {total_frames} ({total_frames/30:.1f} seconds @ 30fps)")
-    print(f"🔥 Fire: Frames {fire_start_frame}-{fire_end_frame} (last 2 seconds)")
+    print(f"🔥 Fire: ACTIVE frames 1-{fire_end_frame}, EXTINGUISHES {fire_end_frame}-{total_frames}")
+    print(f"   Fire FROM START, smoke disperses in last {(total_frames-fire_end_frame)/30:.1f} seconds")
     print(f"🎨 Elements: {len(elements)} (including BANJA LUKA)")
     print(f"📺 Output: PNG with RGBA (alpha channel for Premiere)")
+    print(f"✨ Logo: Golden metallic with GLOW (visible after fire extinguishes)")
     print("\n⚠️  TO BAKE AND RENDER:")
     print("  1. Open the .blend file in Blender")
     print("  2. Press SPACEBAR to play - fluid will bake automatically")
     print("  3. Wait for baking (progress in timeline)")
-    print("  4. Fire appears during last 2 seconds only")
-    print("  5. Render: Animation > Render Animation")
-    print("  6. Output will have transparent background (alpha channel)")
+    print(f"  4. Fire FROM START, extinguishes at frame {fire_end_frame}, smoke disperses")
+    print("  5. Logo remains GLOWING on transparent background")
+    print("  6. Render: Animation > Render Animation")
+    print("  7. Output will have transparent background (alpha channel)")
+    print("\n💡 OPTIMIZATIONS FOR SPEED:")
+    print("  • Resolution: 128 (faster baking)")
+    print("  • Adaptive domain: Enabled (optimizes size)")
+    print("  • Noise: Disabled (much faster)")
     print("\n" + "="*70 + "\n")
 
     return True
