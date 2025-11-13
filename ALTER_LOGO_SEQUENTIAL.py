@@ -117,10 +117,10 @@ def create_fast_fire_material():
     transparent.location = (400, -100)
     links.new(transparent.outputs[0], mix.inputs[1])
 
-    # Emission for fire glow
+    # Emission for fire glow (BRIGHT so it's visible!)
     emission = nodes.new('ShaderNodeEmission')
     emission.location = (400, 100)
-    emission.inputs['Strength'].default_value = 5.0
+    emission.inputs['Strength'].default_value = 20.0  # Increased from 5.0 to 20.0 for visibility
     links.new(emission.outputs[0], mix.inputs[2])
 
     # ColorRamp for fire colors (black to red to orange to yellow)
@@ -186,6 +186,12 @@ def create_fire_for_element(element, index):
     wireframe.use_replace = True
     wireframe.use_boundary = True
 
+    # Apply wireframe modifier so emission shader works on the geometry
+    bpy.ops.object.select_all(action='DESELECT')
+    emitter.select_set(True)
+    bpy.context.view_layer.objects.active = emitter
+    bpy.ops.object.modifier_apply(modifier="Wireframe")
+
     # Parent to element
     emitter.parent = element
     emitter.matrix_parent_inverse = element.matrix_world.inverted()
@@ -200,8 +206,12 @@ def create_fire_for_element(element, index):
     else:
         emitter.data.materials.append(fire_mat)
 
-    # Hide from render (we see the glow but not the geometry)
-    emitter.hide_render = True
+    # DON'T hide emitter - we want to see the fire!
+    # The emission shader creates the glow effect
+    emitter.hide_render = False  # VISIBLE in render
+    emitter.hide_viewport = False  # VISIBLE in viewport
+
+    print(f"    ✓ Fire emitter created (visible, wireframe applied)")
 
     return emitter
 
@@ -337,10 +347,22 @@ def setup_scene(total_frames):
     scene.frame_start = 1
     scene.frame_end = total_frames
 
+    print("  ✓ Render engine: CYCLES (required for emission shader fire)")
+
     # Cycles settings - GPU optimization
     scene.cycles.device = 'GPU'
     scene.cycles.samples = 64  # Low for speed
     scene.cycles.use_denoising = True
+
+    # CRITICAL: Set viewport shading to RENDERED to see fire
+    # This is important for user to see fire in viewport
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    space.shading.type = 'RENDERED'
+
+    print("  ✓ Viewport shading set to RENDERED (fire will be visible)")
 
     # Enable GPU
     prefs = bpy.context.preferences.addons['cycles'].preferences
@@ -437,15 +459,28 @@ def main():
     print(f"🎬 Total frames: {total_frames}")
     print(f"⏱️  Duration: ~{total_frames/30:.1f} seconds at 30fps")
     print("\n🔥 FIRE: Emission shader - NO BAKING NEEDED!")
-    print("   Just open in Blender and render immediately")
+    print("   Emission strength: 20.0 (VERY visible)")
+    print("   Material: FastFire (applied to all emitters)")
+    print("   Wireframe: Applied (fire along element edges)")
+    print()
+    print("⚠️  IMPORTANT - TO SEE FIRE IN BLENDER:")
+    print("   1. Open the .blend file")
+    print("   2. Press 'Z' key in viewport")
+    print("   3. Select 'Rendered' mode")
+    print("   4. Fire should be visible immediately!")
+    print()
+    print("   OR just render with F12 - fire will be in render!")
+    print()
     print("\n✨ Features:")
     print("   • Elements preserve EXACT SVG positions")
     print("   • Only Y axis (depth) animates")
     print("   • X and Z stay at original positions")
     print("   • Fast fire with animated noise texture")
-    print("   • Ready to render in seconds")
-    print("\n💡 Open in Blender and press Space to preview animation")
-    print("   Or render with F12")
+    print("   • Fire emitters are VISIBLE (not hidden)")
+    print("   • Emission strength: 20.0 for high visibility")
+    print()
+    print("💡 Press SPACEBAR to preview animation")
+    print("   Press F12 to render (fire will be visible!)")
     print()
 
 
