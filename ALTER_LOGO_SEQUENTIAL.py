@@ -56,8 +56,12 @@ def import_svg_preserve_positions(svg_path):
     elements = []
 
     for i, curve_obj in enumerate(imported):
-        # Convert curve to mesh first
+        # CRITICAL: Must deselect all and select only this object for convert to work
+        bpy.ops.object.select_all(action='DESELECT')
+        curve_obj.select_set(True)
         bpy.context.view_layer.objects.active = curve_obj
+
+        # Convert curve to mesh
         bpy.ops.object.convert(target='MESH')
         mesh_obj = bpy.context.active_object
         mesh_obj.name = f"LogoElement_{i}"
@@ -65,6 +69,10 @@ def import_svg_preserve_positions(svg_path):
         # CRITICAL: Set origin to geometry center
         # This moves the object's origin to where the geometry actually is
         # and updates mesh_obj.location to the real position
+        # Ensure proper context (mesh_obj is already active from convert, but ensure selection)
+        bpy.ops.object.select_all(action='DESELECT')
+        mesh_obj.select_set(True)
+        bpy.context.view_layer.objects.active = mesh_obj
         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
 
         # Now mesh_obj.location is the REAL position in space
@@ -261,6 +269,11 @@ def create_banja_luka_text():
     text_obj.data.size = 1.0
     text_obj.data.align_x = 'CENTER'
     text_obj.data.align_y = 'CENTER'
+
+    # Ensure proper selection for convert
+    bpy.ops.object.select_all(action='DESELECT')
+    text_obj.select_set(True)
+    bpy.context.view_layer.objects.active = text_obj
 
     # Convert to mesh
     bpy.ops.object.convert(target='MESH')
