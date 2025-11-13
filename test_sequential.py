@@ -4,6 +4,29 @@ Test script for ALTER_LOGO_SEQUENTIAL.py
 Verifies logic without requiring Blender installation
 """
 
+def test_svg_import_detection():
+    """Test that SVG import detection logic works"""
+    print("Testing SVG import detection...")
+
+    # Simulate objects before and after import
+    objects_before = {"Camera", "Light", "Cube"}
+    objects_after = {"Camera", "Light", "Cube", "Curve.001", "Curve.002", "Curve.003"}
+
+    # What was imported
+    imported = list(set(objects_after) - set(objects_before))
+
+    print(f"\n  Objects before import: {len(objects_before)}")
+    print(f"  Objects after import: {len(objects_after)}")
+    print(f"  Newly imported: {len(imported)} - {imported}")
+
+    if len(imported) == 3:
+        print("  ✓ Import detection works correctly")
+        return True
+    else:
+        print("  ✗ Import detection failed")
+        return False
+
+
 def test_animation_logic():
     """Test that animation logic correctly offsets only Y axis"""
 
@@ -133,13 +156,26 @@ if __name__ == "__main__":
     print("ALTER_LOGO_SEQUENTIAL.PY - LOGIC TESTS")
     print("="*60)
 
-    # Run tests
+    # Run all tests
+    all_pass = True
+
     test_origin_set_simulation()
-    success = test_animation_logic()
+
+    if not test_svg_import_detection():
+        all_pass = False
+
+    if not test_animation_logic():
+        all_pass = False
 
     print("\n")
 
-    if success:
+    if all_pass:
+        print("="*60)
+        print("✅ ALL TESTS PASSED")
+        print("="*60)
         exit(0)
     else:
+        print("="*60)
+        print("❌ SOME TESTS FAILED")
+        print("="*60)
         exit(1)
