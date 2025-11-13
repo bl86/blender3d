@@ -24,8 +24,8 @@ def clean_scene():
 
 def import_svg_preserve_positions(svg_path):
     """
-    Import SVG and preserve element positions by setting origin to geometry
-    Each element's location will reflect its actual position in space
+    Import SVG and keep each element separate WITHOUT moving origin
+    This preserves the exact SVG layout
     """
     if not os.path.exists(svg_path):
         print(f"✗ SVG not found: {svg_path}")
@@ -37,7 +37,7 @@ def import_svg_preserve_positions(svg_path):
     # Import SVG
     bpy.ops.import_curve.svg(filepath=svg_path)
 
-    # Get NEW objects after import (what was just imported)
+    # Get NEW objects after import
     objects_after = set(bpy.data.objects)
     imported = list(objects_after - objects_before)
 
@@ -56,32 +56,32 @@ def import_svg_preserve_positions(svg_path):
     elements = []
 
     for i, curve_obj in enumerate(imported):
-        # CRITICAL: Must deselect all and select only this object for convert to work
+        # CRITICAL: Must deselect all and select only this object for convert
         bpy.ops.object.select_all(action='DESELECT')
         curve_obj.select_set(True)
         bpy.context.view_layer.objects.active = curve_obj
+
+        # Add minimal extrude for 3D (like ALTER_LOGO_COMPLETE)
+        curve_obj.data.extrude = 0.005
+        curve_obj.data.bevel_depth = 0.0
 
         # Convert curve to mesh
         bpy.ops.object.convert(target='MESH')
         mesh_obj = bpy.context.active_object
         mesh_obj.name = f"LogoElement_{i}"
 
-        # CRITICAL: Set origin to geometry center
-        # This moves the object's origin to where the geometry actually is
-        # and updates mesh_obj.location to the real position
-        # Ensure proper context (mesh_obj is already active from convert, but ensure selection)
-        bpy.ops.object.select_all(action='DESELECT')
-        mesh_obj.select_set(True)
-        bpy.context.view_layer.objects.active = mesh_obj
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+        # DON'T USE origin_set - it moves elements to wrong positions!
+        # Leave geometry exactly as imported from SVG
 
-        # Now mesh_obj.location is the REAL position in space
+        # Store original location for animation
+        mesh_obj["svg_original_loc"] = (mesh_obj.location.x, mesh_obj.location.y, mesh_obj.location.z)
+
         print(f"  Element {i} ({mesh_obj.name}):")
-        print(f"    Position: X={mesh_obj.location.x:.3f}, Y={mesh_obj.location.y:.3f}, Z={mesh_obj.location.z:.3f}")
+        print(f"    Location: X={mesh_obj.location.x:.3f}, Y={mesh_obj.location.y:.3f}, Z={mesh_obj.location.z:.3f}")
 
-        # Add solidify to give thickness
+        # Add solidify for thickness
         solidify = mesh_obj.modifiers.new(name="Solidify", type='SOLIDIFY')
-        solidify.thickness = 0.15
+        solidify.thickness = 0.05
         solidify.offset = 0
 
         elements.append(mesh_obj)
