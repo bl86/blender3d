@@ -24,8 +24,8 @@ def clean_scene():
 
 def import_svg_preserve_positions(svg_path):
     """
-    Import SVG and measure ACTUAL world space positions via bounding box
-    This is the ONLY way to get real positions - location is always (0,0,0)
+    Import SVG and preserve element positions by setting origin to geometry
+    Each element's location will reflect its actual position in space
     """
     if not os.path.exists(svg_path):
         print(f"✗ SVG not found: {svg_path}")
@@ -42,35 +42,29 @@ def import_svg_preserve_positions(svg_path):
         return []
 
     print(f"✓ Imported {len(imported)} SVG elements")
-    print("\n  Measuring REAL positions from geometry...")
 
     elements = []
 
     for i, curve_obj in enumerate(imported):
-        # Get the bounding box center in WORLD SPACE before any changes
-        # This is where the element REALLY is in 3D space
-        bbox_center = sum((Vector(b) for b in curve_obj.bound_box), Vector()) / 8
-        world_center = curve_obj.matrix_world @ bbox_center
-
-        print(f"  Element {i} ({curve_obj.name}):")
-        print(f"    Real position: X={world_center.x:.3f}, Y={world_center.y:.3f}, Z={world_center.z:.3f}")
-
-        # Convert curve to mesh (needed for rendering)
+        # Convert curve to mesh first
         bpy.context.view_layer.objects.active = curve_obj
         bpy.ops.object.convert(target='MESH')
         mesh_obj = bpy.context.active_object
         mesh_obj.name = f"LogoElement_{i}"
 
+        # CRITICAL: Set origin to geometry center
+        # This moves the object's origin to where the geometry actually is
+        # and updates mesh_obj.location to the real position
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+
+        # Now mesh_obj.location is the REAL position in space
+        print(f"  Element {i} ({mesh_obj.name}):")
+        print(f"    Position: X={mesh_obj.location.x:.3f}, Y={mesh_obj.location.y:.3f}, Z={mesh_obj.location.z:.3f}")
+
         # Add solidify to give thickness
         solidify = mesh_obj.modifiers.new(name="Solidify", type='SOLIDIFY')
         solidify.thickness = 0.15
         solidify.offset = 0
-
-        # DON'T move object - it's already in correct position from SVG import
-        # Just store the world center for animation reference
-        mesh_obj["world_center_x"] = world_center.x
-        mesh_obj["world_center_y"] = world_center.y
-        mesh_obj["world_center_z"] = world_center.z
 
         elements.append(mesh_obj)
 
