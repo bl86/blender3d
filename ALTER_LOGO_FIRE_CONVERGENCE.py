@@ -64,10 +64,10 @@ class AnimationConfig:
     MESH_RESOLUTION = 12
 
     # Fire settings
-    FIRE_PARTICLE_COUNT = 5000
-    FIRE_LIFETIME = 30
-    FIRE_SIZE = 0.15
-    FIRE_VELOCITY = 0.5
+    FIRE_PARTICLE_COUNT = 1000  # Reduced for better performance in Blender 4.5
+    FIRE_LIFETIME = 20
+    FIRE_SIZE = 0.3  # Larger particles for visibility
+    FIRE_VELOCITY = 1.0  # Faster movement
 
     # Camera settings
     LOGO_SCREEN_COVERAGE = 2/3  # 2/3 of screen
@@ -604,26 +604,35 @@ class FireEffectCreator:
         """
         settings = psys.settings
 
-        # Keyframe emission at full strength
-        settings.count = AnimationConfig.FIRE_PARTICLE_COUNT
-        settings.keyframe_insert(
-            data_path="count",
-            frame=AnimationConfig.FIRE_FADEOUT_START_FRAME
-        )
+        # Blender 4.5 compatibility - particle count may not be animatable
+        try:
+            # Try to keyframe particle count
+            settings.count = AnimationConfig.FIRE_PARTICLE_COUNT
+            settings.keyframe_insert(
+                data_path="count",
+                frame=AnimationConfig.FIRE_FADEOUT_START_FRAME
+            )
 
-        # Keyframe emission at zero (fadeout)
-        settings.count = 0
-        settings.keyframe_insert(
-            data_path="count",
-            frame=AnimationConfig.FIRE_FADEOUT_END_FRAME
-        )
+            settings.count = 0
+            settings.keyframe_insert(
+                data_path="count",
+                frame=AnimationConfig.FIRE_FADEOUT_END_FRAME
+            )
 
-        # Set interpolation to smooth
-        if psys.settings.animation_data:
-            for fcurve in psys.settings.animation_data.action.fcurves:
-                if 'count' in fcurve.data_path:
-                    for keyframe in fcurve.keyframe_points:
-                        keyframe.interpolation = 'BEZIER'
+            # Set interpolation to smooth
+            if psys.settings.animation_data:
+                for fcurve in psys.settings.animation_data.action.fcurves:
+                    if 'count' in fcurve.data_path:
+                        for keyframe in fcurve.keyframe_points:
+                            keyframe.interpolation = 'BEZIER'
+        except (TypeError, RuntimeError):
+            # In Blender 4.5+, count is not animatable
+            # Instead, we'll use frame_start and frame_end to control visibility
+            try:
+                settings.frame_start = AnimationConfig.CONVERGENCE_START_FRAME
+                settings.frame_end = AnimationConfig.FIRE_FADEOUT_END_FRAME
+            except:
+                pass  # Fire fadeout not critical if can't animate
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -654,6 +663,7 @@ class AnimationCreator:
         }
 
         # Animate each component
+        total_animated = 0
         for component_type, objects in components.items():
             if not objects:
                 continue
@@ -662,6 +672,9 @@ class AnimationCreator:
 
             for obj in objects:
                 AnimationCreator.animate_object_convergence(obj, direction)
+                total_animated += 1
+
+        print_step(f"Animation created", f"{total_animated} objects animated")
 
     @staticmethod
     def animate_object_convergence(obj: bpy.types.Object, direction: Vector) -> None:

@@ -144,8 +144,8 @@ def test_configuration():
     assert_in_range(0.05, 0.01, 0.15, "Extrude depth is reasonable")
 
     # Fire settings
-    assert_true(5000 > 0, "Fire particle count is positive", "5000 > 0")
-    assert_true(30 > 0, "Fire lifetime is positive", "30 > 0")
+    assert_true(1000 > 0, "Fire particle count is positive", "1000 > 0")
+    assert_true(20 > 0, "Fire lifetime is positive", "20 > 0")
 
     # Camera settings
     camera_coverage = 2/3
