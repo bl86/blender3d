@@ -510,129 +510,204 @@ class MaterialCreator:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class FireEffectCreator:
-    """Creates fire particle systems for components"""
+    """Creates volumetric fire using Mantaflow fluid simulation"""
 
     @staticmethod
-    def create_fire_for_object(obj: bpy.types.Object, fire_material: bpy.types.Material) -> bpy.types.ParticleSystem:
+    def create_fire_for_object(obj: bpy.types.Object, fire_material: bpy.types.Material) -> bpy.types.Object:
         """
-        Create fire particle system for object
+        Create volumetric fire domain for object using Mantaflow
 
         Args:
             obj: Object to add fire to
-            fire_material: Material to use for fire particles
+            fire_material: Material to use for fire
 
         Returns:
-            Created particle system
+            Created fire domain object
         """
-        # Add particle system
-        bpy.ops.object.select_all(action='DESELECT')
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
+        # Calculate object bounds for domain size
+        bbox = obj.bound_box
+        min_coords = Vector((min([v[0] for v in bbox]), min([v[1] for v in bbox]), min([v[2] for v in bbox])))
+        max_coords = Vector((max([v[0] for v in bbox]), max([v[1] for v in bbox]), max([v[2] for v in bbox])))
+        center = (min_coords + max_coords) / 2
+        dimensions = max_coords - min_coords
 
-        bpy.ops.object.particle_system_add()
-        psys = obj.particle_systems[-1]
-        psys.name = f"Fire_{obj.name}"
+        # Create fire domain (slightly larger than object)
+        scale = 1.5
+        bpy.ops.mesh.primitive_cube_add(
+            size=1,
+            location=obj.location + center
+        )
+        domain = bpy.context.active_object
+        domain.name = f"FireDomain_{obj.name}"
+        domain.scale = dimensions * scale
 
-        # Configure particle settings
-        settings = psys.settings
-        settings.name = f"FireSettings_{obj.name}"
+        # Make domain follow object (parent to object)
+        domain.parent = obj
+        domain.matrix_parent_inverse = obj.matrix_world.inverted()
 
-        # Emission
-        settings.count = AnimationConfig.FIRE_PARTICLE_COUNT
-        settings.emit_from = 'FACE'
-        settings.use_emit_random = True
-        settings.lifetime = AnimationConfig.FIRE_LIFETIME
-        settings.lifetime_random = 0.3
+        # Add fluid modifier - DOMAIN
+        fluid_mod = domain.modifiers.new(name="Fluid", type='FLUID')
 
-        # Velocity
-        settings.normal_factor = AnimationConfig.FIRE_VELOCITY
-        settings.factor_random = 0.5
-
-        # Gravity - Blender 4.5 compatibility
         try:
-            settings.effector_weights.gravity = -0.1  # Slight upward movement
-        except:
-            pass  # Gravity effect not critical
+            fluid_mod.fluid_type = 'DOMAIN'
+            domain_settings = fluid_mod.domain_settings
+            domain_settings.domain_type = 'GAS'
 
-        # Physics
-        settings.physics_type = 'NEWTON'
-        settings.mass = 0.1
-        settings.use_multiply_size_mass = True
-        settings.particle_size = AnimationConfig.FIRE_SIZE
-        settings.size_random = 0.5
+            # Resolution - keep low for performance
+            domain_settings.resolution_max = 64
+            domain_settings.use_adaptive_domain = True
 
-        # Render - Blender 4.5 compatibility
-        # Try HALO first, fallback to OBJECT if not available
-        try:
-            settings.render_type = 'HALO'
-        except:
-            # Blender 4.5+ may use different render types
+            # Fire settings
+            domain_settings.use_noise = False  # Disable noise for performance
+
+            # Display settings
+            domain_settings.display_thickness = 0.5
             try:
-                settings.render_type = 'OBJECT'
+                domain_settings.display_interpolation = 'LINEAR'
             except:
-                pass  # Use default
+                pass
 
-        # Hide emitter - Blender 4.5 compatibility
-        try:
-            settings.use_render_emitter = False
+            # Hide domain mesh
+            domain.display_type = 'WIRE'
+            domain.hide_render = True
+
         except AttributeError:
-            try:
-                settings.show_instancer_for_render = False
-            except:
-                pass  # Not critical
+            # Blender 4.5 might have different API
+            pass
 
-        # Material slot for particles - Blender 4.5 compatibility
-        if fire_material:
-            try:
-                settings.material_slot = 'FireParticle'
-            except:
-                # In newer Blender versions, material assignment may differ
-                try:
-                    settings.material = len(bpy.data.materials) - 1
-                except:
-                    pass  # Material assignment not critical
+        # Create emitter (smaller cube around object)
+        bpy.ops.mesh.primitive_cube_add(
+            size=1,
+            location=obj.location + center
+        )
+        emitter = bpy.context.active_object
+        emitter.name = f"FireEmitter_{obj.name}"
+        emitter.scale = dimensions * 1.1
 
-        return psys
+        # Parent emitter to object so it moves with it
+        emitter.parent = obj
+        emitter.matrix_parent_inverse = obj.matrix_world.inverted()
+
+        # Add fluid modifier - FLOW
+        emitter_fluid = emitter.modifiers.new(name="Fluid", type='FLUID')
+
+        try:
+            emitter_fluid.fluid_type = 'FLOW'
+            flow_settings = emitter_fluid.flow_settings
+            flow_settings.flow_type = 'FIRE'
+            flow_settings.fuel_amount = 1.5
+
+            # Smoke settings
+            flow_settings.smoke_color = (0.1, 0.1, 0.1)
+            flow_settings.temperature = 2.0
+
+            # Flow behavior
+            try:
+                flow_settings.flow_behavior = 'INFLOW'
+            except:
+                pass
+
+        except AttributeError:
+            pass
+
+        # Hide emitter
+        emitter.display_type = 'WIRE'
+        emitter.hide_render = True
+
+        # Create volumetric fire material for domain
+        if not fire_material:
+            fire_material = FireEffectCreator.create_volumetric_fire_material()
+
+        if domain.data.materials:
+            domain.data.materials[0] = fire_material
+        else:
+            domain.data.materials.append(fire_material)
+
+        print_step(f"  Created fire for {obj.name}", "volumetric Mantaflow")
+
+        return domain
 
     @staticmethod
-    def setup_fire_fadeout(psys: bpy.types.ParticleSystem) -> None:
+    def create_volumetric_fire_material() -> bpy.types.Material:
+        """Create volumetric fire material for domain"""
+        mat = bpy.data.materials.new(name="VolumeFire")
+        mat.use_nodes = True
+
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        nodes.clear()
+
+        # Output
+        output = nodes.new('ShaderNodeOutputMaterial')
+        output.location = (800, 0)
+
+        # Principled Volume
+        volume = nodes.new('ShaderNodeVolumePrincipled')
+        volume.location = (400, 0)
+
+        # Fire settings
+        volume.inputs['Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+        volume.inputs['Density'].default_value = 1.0
+        volume.inputs['Emission Strength'].default_value = 10.0
+        volume.inputs['Blackbody Intensity'].default_value = 1.0
+        volume.inputs['Temperature'].default_value = 1500.0
+
+        # Connect
+        links.new(volume.outputs['Volume'], output.inputs['Volume'])
+
+        return mat
+
+    @staticmethod
+    def setup_fire_fadeout(fire_domain: bpy.types.Object) -> None:
         """
-        Setup keyframes for fire fadeout in last 40 frames
+        Setup animation for fire fadeout in last 40 frames
 
         Args:
-            psys: Particle system to animate
+            fire_domain: Fire domain object to animate
         """
-        settings = psys.settings
+        # Find the emitter child
+        emitter = None
+        for child in fire_domain.parent.children:
+            if "FireEmitter" in child.name:
+                emitter = child
+                break
 
-        # Blender 4.5 compatibility - particle count may not be animatable
+        if not emitter:
+            return
+
+        # Get the fluid modifier
+        fluid_mod = None
+        for mod in emitter.modifiers:
+            if mod.type == 'FLUID':
+                fluid_mod = mod
+                break
+
+        if not fluid_mod:
+            return
+
         try:
-            # Try to keyframe particle count
-            settings.count = AnimationConfig.FIRE_PARTICLE_COUNT
-            settings.keyframe_insert(
-                data_path="count",
+            flow_settings = fluid_mod.flow_settings
+
+            # Animate fuel amount for fadeout
+            # Full fire at start
+            flow_settings.fuel_amount = 1.5
+            flow_settings.keyframe_insert(
+                data_path="fuel_amount",
                 frame=AnimationConfig.FIRE_FADEOUT_START_FRAME
             )
 
-            settings.count = 0
-            settings.keyframe_insert(
-                data_path="count",
+            # No fire at end
+            flow_settings.fuel_amount = 0.0
+            flow_settings.keyframe_insert(
+                data_path="fuel_amount",
                 frame=AnimationConfig.FIRE_FADEOUT_END_FRAME
             )
 
-            # Set interpolation to smooth
-            if psys.settings.animation_data:
-                for fcurve in psys.settings.animation_data.action.fcurves:
-                    if 'count' in fcurve.data_path:
-                        for keyframe in fcurve.keyframe_points:
-                            keyframe.interpolation = 'BEZIER'
-        except (TypeError, RuntimeError):
-            # In Blender 4.5+, count is not animatable
-            # Instead, we'll use frame_start and frame_end to control visibility
-            try:
-                settings.frame_start = AnimationConfig.CONVERGENCE_START_FRAME
-                settings.frame_end = AnimationConfig.FIRE_FADEOUT_END_FRAME
-            except:
-                pass  # Fire fadeout not critical if can't animate
+            print_step("  Fire fadeout animated", f"frames {AnimationConfig.FIRE_FADEOUT_START_FRAME}-{AnimationConfig.FIRE_FADEOUT_END_FRAME}")
+
+        except (TypeError, RuntimeError, AttributeError):
+            # Fadeout animation not critical
+            pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -894,10 +969,12 @@ class LogoFireAnimation:
                     obj.data.materials.append(golden_material)
 
             # 6. Create fire effects for each object
-            print_step("Creating fire particle systems")
+            print_step("Creating volumetric fire (Mantaflow)")
+            fire_domains = []
             for obj in self.objects:
-                psys = FireEffectCreator.create_fire_for_object(obj, fire_material)
-                FireEffectCreator.setup_fire_fadeout(psys)
+                fire_domain = FireEffectCreator.create_fire_for_object(obj, None)
+                FireEffectCreator.setup_fire_fadeout(fire_domain)
+                fire_domains.append(fire_domain)
 
             # 7. Create convergence animation
             AnimationCreator.create_convergence_animation(self.components)
@@ -909,22 +986,50 @@ class LogoFireAnimation:
             centroid = ComponentIdentifier.calculate_centroid(self.objects)
             self.lights = LightingSetup.create_lights(centroid)
 
-            # 10. Save file
+            # 10. Align camera to render view
+            self.align_camera_to_view()
+
+            # 11. Save file
             self.save_file()
 
             print_header("SETUP COMPLETE")
             print(f"  ✓ Total objects: {len(self.objects)}")
+            print(f"  ✓ Fire domains: {len(fire_domains)} volumetric Mantaflow simulations")
             print(f"  ✓ Components identified: {sum(len(v) for v in self.components.values() if v)}")
             print(f"  ✓ Animation length: {AnimationConfig.TOTAL_FRAMES} frames ({AnimationConfig.TOTAL_FRAMES/AnimationConfig.FPS:.1f}s)")
             print(f"  ✓ Fire fadeout: frames {AnimationConfig.FIRE_FADEOUT_START_FRAME}-{AnimationConfig.FIRE_FADEOUT_END_FRAME}")
+            print(f"  ✓ Camera: Aligned to render view at frame 200")
             print(f"  ✓ Output file: {AnimationConfig.OUTPUT_FILENAME}")
-            print(f"\n  Ready to render! Press Spacebar in Blender to preview animation.\n")
+            print(f"\n  IMPORTANT: To see realistic fire:")
+            print(f"    1. Open .blend file in Blender")
+            print(f"    2. Switch viewport shading to RENDERED (press Z → Rendered)")
+            print(f"    3. Or render a frame (F12) to see volumetric fire")
+            print(f"    4. Fire simulation requires baking in viewport")
+            print(f"\n  Ready! Press Spacebar to preview animation.\n")
 
         except Exception as e:
             print(f"\n❌ ERROR: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
+
+    def align_camera_to_view(self) -> None:
+        """Align camera to show logo properly in render view"""
+        if not self.camera:
+            return
+
+        # Set camera as active
+        bpy.context.scene.camera = self.camera
+
+        # Go to frame 200 (when logo is fully formed)
+        bpy.context.scene.frame_set(AnimationConfig.CONVERGENCE_END_FRAME)
+
+        # Select camera
+        bpy.ops.object.select_all(action='DESELECT')
+        self.camera.select_set(True)
+        bpy.context.view_layer.objects.active = self.camera
+
+        print_step("Camera aligned to render view", "Frame 200")
 
     def save_file(self) -> None:
         """Save Blender file"""
