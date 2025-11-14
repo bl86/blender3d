@@ -219,23 +219,25 @@ def create_logo_material():
     return mat
 
 
-def animate_elements_sequential(elements, total_duration=180):
+def animate_elements_sequential(elements, total_duration=120):
     """
     Animate elements sequentially TOWARD camera
     Elements start FAR (positive Y) and move NEAR (negative Y)
     Fire FROM START, extinguishes in LAST 2 SECONDS
 
+    SHORTENED for faster playback
+
     Returns: (total_frames, fire_end_frame, element_timings)
     """
     print("\nAnimating elements TOWARD camera...")
 
-    frames_per_element = 30  # Each element takes 30 frames to arrive
-    gap_between_elements = 15  # Gap between element starts
+    frames_per_element = 20  # SHORTENED: Each element takes 20 frames (was 30)
+    gap_between_elements = 8  # SHORTENED: Smaller gap (was 15)
 
     # Fire FROM START, extinguishes in last 2 seconds
     fire_extinguish_duration = 60  # Last 2 seconds at 30fps
     total_frames = total_duration
-    fire_end_frame = total_frames - fire_extinguish_duration  # Fire stops at frame 120
+    fire_end_frame = total_frames - fire_extinguish_duration  # Fire stops at frame 60
     fire_start_frame = 1  # Fire starts from beginning
 
     print(f"  Total animation: {total_frames} frames ({total_frames/30:.1f} seconds)")
@@ -313,13 +315,21 @@ def create_fire_domain(total_frames, fire_end_frame):
     domain_settings.resolution_max = 128  # Lower resolution for FASTER baking
     domain_settings.use_adaptive_domain = True  # Optimize domain size
 
-    # Cache from START (fire active from beginning)
+    # CRITICAL: Set cache type to MODULAR for automatic baking
+    domain_settings.cache_type = 'MODULAR'
     domain_settings.cache_frame_start = 1
     domain_settings.cache_frame_end = total_frames
 
     # Disable noise for MUCH faster baking
     try:
         domain_settings.use_noise = False
+    except:
+        pass
+
+    # Additional settings for better fire visibility
+    try:
+        domain_settings.use_guide = False  # Disable guiding for simplicity
+        domain_settings.clipping = 1e-06  # Better clipping
     except:
         pass
 
@@ -365,9 +375,9 @@ def create_fire_domain(total_frames, fire_end_frame):
     links.new(density_attr.outputs['Fac'], volume.inputs['Density'])
     links.new(volume.outputs['Volume'], output.inputs['Volume'])
 
-    # Adjust for visibility
-    volume.inputs['Density'].default_value = 3.0  # Increased for visibility
-    volume.inputs['Emission Strength'].default_value = 15.0  # Bright fire
+    # Adjust for MAXIMUM visibility
+    volume.inputs['Density'].default_value = 5.0  # VERY HIGH for visibility
+    volume.inputs['Emission Strength'].default_value = 25.0  # VERY BRIGHT fire
     volume.inputs['Blackbody Intensity'].default_value = 1.0
 
     # Apply material
@@ -420,12 +430,12 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
     flow.flow_behavior = 'INFLOW'
 
     try:
-        flow.fuel_amount = 3.0  # Increased for visibility
+        flow.fuel_amount = 5.0  # VERY HIGH for visibility
     except:
         pass
 
     try:
-        flow.temperature = 4.0  # Increased for visibility
+        flow.temperature = 5.0  # VERY HIGH for visibility
     except:
         pass
 
@@ -558,6 +568,30 @@ def setup_render_settings(total_frames):
     print("✓ Render settings configured (RGBA PNG output)")
 
 
+def set_viewport_to_camera():
+    """
+    Set all 3D viewports to camera view and rendered shading
+    So user can immediately see what will be rendered
+    """
+    print("\nSetting viewport to camera view...")
+
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    # Set to camera view
+                    space.region_3d.view_perspective = 'CAMERA'
+
+                    # Set shading to RENDERED mode
+                    space.shading.type = 'RENDERED'
+
+                    # Lock camera to view
+                    space.lock_camera = True
+
+                    print("  ✓ Viewport set to camera view (rendered mode)")
+                    break
+
+
 def main():
     """Main execution - SENIOR DEVELOPER APPROACH"""
     print("\n" + "="*70)
@@ -628,6 +662,12 @@ def main():
     # Setup render settings with alpha
     setup_render_settings(total_frames)
 
+    # Set viewport to camera view (so user sees rendered result)
+    set_viewport_to_camera()
+
+    # Set playback to frame 1 (start of animation)
+    bpy.context.scene.frame_set(1)
+
     # Save blend file
     output_path = os.path.join(os.path.dirname(__file__), "alter_logo_sequential_v2.blend")
     bpy.ops.wm.save_as_mainfile(filepath=output_path)
@@ -651,9 +691,15 @@ def main():
     print("  6. Render: Animation > Render Animation")
     print("  7. Output will have transparent background (alpha channel)")
     print("\n💡 OPTIMIZATIONS FOR SPEED:")
+    print("  • Animation: SHORTENED to 120 frames (4 seconds)")
     print("  • Resolution: 128 (faster baking)")
     print("  • Adaptive domain: Enabled (optimizes size)")
     print("  • Noise: Disabled (much faster)")
+    print("  • Cache type: MODULAR (automatic baking)")
+    print("\n💡 VIEWPORT:")
+    print("  • Automatically set to CAMERA VIEW")
+    print("  • RENDERED mode enabled")
+    print("  • Fire should be VISIBLE when baked")
     print("\n" + "="*70 + "\n")
 
     return True
