@@ -141,7 +141,7 @@ def test_configuration():
     assert_true(260 < 300, "Fire fadeout starts before animation ends", "260 < 300")
 
     # Mesh settings
-    assert_in_range(0.2, 0.05, 0.5, "Extrude depth is reasonable")
+    assert_in_range(0.05, 0.01, 0.15, "Extrude depth is reasonable")
 
     # Fire settings
     assert_true(5000 > 0, "Fire particle count is positive", "5000 > 0")

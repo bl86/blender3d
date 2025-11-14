@@ -60,7 +60,7 @@ class AnimationConfig:
     FIRE_FADEOUT_END_FRAME = 300
 
     # Mesh settings
-    EXTRUDE_DEPTH = 0.2
+    EXTRUDE_DEPTH = 0.05  # Reduced for thinner logo
     MESH_RESOLUTION = 12
 
     # Fire settings
@@ -405,8 +405,16 @@ class MaterialCreator:
         principled.inputs['Base Color'].default_value = (1.0, 0.766, 0.336, 1.0)
         principled.inputs['Metallic'].default_value = 1.0
         principled.inputs['Roughness'].default_value = 0.15
-        principled.inputs['Specular'].default_value = 0.5
-        principled.inputs['Anisotropic'].default_value = 0.3
+
+        # Specular input - check if exists (Blender version compatibility)
+        if 'Specular' in principled.inputs:
+            principled.inputs['Specular'].default_value = 0.5
+        elif 'Specular IOR Level' in principled.inputs:
+            principled.inputs['Specular IOR Level'].default_value = 0.5
+
+        # Anisotropic - check if exists
+        if 'Anisotropic' in principled.inputs:
+            principled.inputs['Anisotropic'].default_value = 0.3
 
         # Connect
         links.new(principled.outputs['BSDF'], output.inputs['Surface'])
