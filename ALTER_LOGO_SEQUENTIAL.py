@@ -355,19 +355,18 @@ def create_fire_domain(total_frames, fire_end_frame, elements):
 
     # Configure for fire
     domain_settings.domain_type = 'GAS'
-    domain_settings.resolution_max = 128  # Lower resolution for FASTER baking
-    domain_settings.use_adaptive_domain = True  # Optimize domain size
+    domain_settings.resolution_max = 256  # Higher resolution for better fire visibility
 
-    # CRITICAL: Set cache type to MODULAR for automatic baking
-    domain_settings.cache_type = 'MODULAR'
-    domain_settings.cache_frame_start = 1
-    domain_settings.cache_frame_end = total_frames
-
-    # Disable noise for MUCH faster baking
+    # Noise settings (SAME as working version)
     try:
-        domain_settings.use_noise = False
+        domain_settings.use_noise = True
+        domain_settings.noise_scale = 2  # Must be int
     except:
-        pass
+        pass  # Noise not available in this version
+
+    # Cache settings
+    domain_settings.cache_frame_start = 1
+    domain_settings.cache_frame_end = fire_end_frame + 60  # Fire ends, add buffer
 
     # Additional settings for better fire visibility
     try:
@@ -477,30 +476,25 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
     flow.flow_behavior = 'INFLOW'
 
     try:
-        flow.fuel_amount = 5.0  # VERY HIGH for visibility
-    except:
-        pass
+        flow.fuel_amount = 2.0
+    except AttributeError:
+        pass  # fuel_amount not available
 
     try:
-        flow.temperature = 5.0  # VERY HIGH for visibility
-    except:
-        pass
+        flow.temperature = 3.0
+    except AttributeError:
+        pass  # temperature not available
 
-    # Animate fire - active FROM START, extinguishes at fire_end_frame
+    # Animate fire fade - fire FROM START, extinguishes at fire_end_frame
     try:
-        # Fire starts FROM BEGINNING
-        flow.use_flow = True
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=1)
-
-        # Fire stays active
-        flow.use_flow = True
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=fire_end_frame - 1)
-
-        # Fire EXTINGUISHES (stops emitting, smoke disperses)
-        flow.use_flow = False
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="use_flow", frame=fire_end_frame)
-    except:
-        # If keyframing fails, fire will be on throughout
+        flow.density = 1.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=1)
+        flow.density = 1.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame - 10)
+        flow.density = 0.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame)
+    except (AttributeError, TypeError):
+        # Keyframing might not work, try simple approach
         pass
 
     # Hide emitter
