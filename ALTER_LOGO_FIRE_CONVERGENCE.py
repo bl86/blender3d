@@ -547,7 +547,12 @@ class FireEffectCreator:
         # Velocity
         settings.normal_factor = AnimationConfig.FIRE_VELOCITY
         settings.factor_random = 0.5
-        settings.effector_weights.gravity = -0.1  # Slight upward movement
+
+        # Gravity - Blender 4.5 compatibility
+        try:
+            settings.effector_weights.gravity = -0.1  # Slight upward movement
+        except:
+            pass  # Gravity effect not critical
 
         # Physics
         settings.physics_type = 'NEWTON'
@@ -567,7 +572,14 @@ class FireEffectCreator:
             except:
                 pass  # Use default
 
-        settings.use_render_emitter = False
+        # Hide emitter - Blender 4.5 compatibility
+        try:
+            settings.use_render_emitter = False
+        except AttributeError:
+            try:
+                settings.show_instancer_for_render = False
+            except:
+                pass  # Not critical
 
         # Material slot for particles - Blender 4.5 compatibility
         if fire_material:
@@ -796,7 +808,13 @@ class LightingSetup:
         rim_light = bpy.context.active_object
         rim_light.name = "RimLight"
         rim_light.data.energy = 300
-        rim_light.data.spot_size = math.radians(60)
+
+        # Spot size - Blender 4.5 compatibility
+        try:
+            rim_light.data.spot_size = math.radians(60)
+        except:
+            pass  # Spot size not critical
+
         lights.append(rim_light)
 
         # Point all lights at centroid
