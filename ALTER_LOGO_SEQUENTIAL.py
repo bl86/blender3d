@@ -312,68 +312,59 @@ def animate_elements_sequential(elements, total_duration=240):
 
 def create_fire_domain(total_frames, fire_end_frame, elements):
     """
-    Create FLUID fire domain
-    Fire FROM START, extinguishes at fire_end_frame, disperses until total_frames
-    Domain sized and positioned to cover ALL elements
+    Create SIMPLE fire domain - EXACT copy from ALTER_LOGO_COMPLETE.py
     """
-    print("\nCreating FLUID fire domain...")
+    print("\nCreating fire domain...")
 
-    # Calculate bounding box of ALL elements
-    min_x = min(elem.location.x for elem in elements)
-    max_x = max(elem.location.x for elem in elements)
-    min_z = min(elem.location.z for elem in elements)
-    max_z = max(elem.location.z for elem in elements)
-
-    # Y range includes animation path (elements move from 20 to ~0)
-    min_y = -5  # Elements end around 0, give margin
-    max_y = 25  # Elements start at 20, give margin
-
-    # Calculate domain center and size
-    center_x = (min_x + max_x) / 2
-    center_y = (min_y + max_y) / 2
-    center_z = (min_z + max_z) / 2
-
-    size_x = (max_x - min_x) + 5  # Add margin
-    size_y = (max_y - min_y) + 5  # Add margin
-    size_z = (max_z - min_z) + 5  # Add margin
-    domain_size = max(size_x, size_y, size_z)  # Use largest dimension
-
-    print(f"  Element bounds: X[{min_x:.2f}, {max_x:.2f}], Y[{min_y:.2f}, {max_y:.2f}], Z[{min_z:.2f}, {max_z:.2f}]")
-    print(f"  Domain center: ({center_x:.2f}, {center_y:.2f}, {center_z:.2f})")
-    print(f"  Domain size: {domain_size:.2f}")
-
-    # Domain covering animation path
-    bpy.ops.mesh.primitive_cube_add(size=domain_size, location=(center_x, center_y, center_z))
+    # FIXED domain - covers animation path
+    # Size 25 covers Y: 20 to -2 (22 units + margin)
+    bpy.ops.mesh.primitive_cube_add(size=25, location=(0, 9, 0))
     domain = bpy.context.active_object
     domain.name = "FireDomain"
     domain.display_type = 'WIRE'
+
+    print(f"  Domain: size=25, location=(0, 9, 0)")
 
     # Add FLUID domain modifier
     bpy.ops.object.modifier_add(type='FLUID')
     domain.modifiers["Fluid"].fluid_type = 'DOMAIN'
     domain_settings = domain.modifiers["Fluid"].domain_settings
 
-    # Configure for fire
+    # Configure domain - LOWER resolution for FASTER baking
     domain_settings.domain_type = 'GAS'
-    domain_settings.resolution_max = 256  # Higher resolution for better fire visibility
+    domain_settings.resolution_max = 128  # Lower for speed
 
-    # Noise settings (SAME as working version)
+    # NO noise for MUCH faster baking
     try:
-        domain_settings.use_noise = True
-        domain_settings.noise_scale = 2  # Must be int
-    except:
-        pass  # Noise not available in this version
-
-    # Cache settings
-    domain_settings.cache_frame_start = 1
-    domain_settings.cache_frame_end = fire_end_frame + 60  # Fire ends, add buffer
-
-    # Additional settings for better fire visibility
-    try:
-        domain_settings.use_guide = False  # Disable guiding for simplicity
-        domain_settings.clipping = 1e-06  # Better clipping
+        domain_settings.use_noise = False
     except:
         pass
+
+    # Fire settings (Blender 4.5+ compatibility)
+    try:
+        domain_settings.use_fire = True
+    except AttributeError:
+        pass
+
+    try:
+        domain_settings.alpha = 1.0
+        domain_settings.beta = 1.0
+    except AttributeError:
+        pass
+
+    try:
+        domain_settings.flame_smoke = 1.0
+    except AttributeError:
+        pass
+
+    try:
+        domain_settings.vorticity = 0.3
+    except AttributeError:
+        pass
+
+    # Cache - only until fire ends
+    domain_settings.cache_frame_start = 1
+    domain_settings.cache_frame_end = fire_end_frame + 30
 
     # Fire material with Principled Volume
     mat = bpy.data.materials.new(name="FireMaterial")
@@ -417,9 +408,9 @@ def create_fire_domain(total_frames, fire_end_frame, elements):
     links.new(density_attr.outputs['Fac'], volume.inputs['Density'])
     links.new(volume.outputs['Volume'], output.inputs['Volume'])
 
-    # Adjust for MAXIMUM visibility
-    volume.inputs['Density'].default_value = 5.0  # VERY HIGH for visibility
-    volume.inputs['Emission Strength'].default_value = 25.0  # VERY BRIGHT fire
+    # MAXIMUM visibility settings
+    volume.inputs['Density'].default_value = 5.0  # Higher for visibility
+    volume.inputs['Emission Strength'].default_value = 20.0  # Brighter
     volume.inputs['Blackbody Intensity'].default_value = 1.0
 
     # Apply material
@@ -450,14 +441,12 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
     emitter = bpy.context.active_object
     emitter.name = f"FireEmitter_{index:02d}"
 
-    # Add wireframe modifier
-    wireframe_mod = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
-    wireframe_mod.thickness = 0.08  # Thin wireframe (same as working version)
-    wireframe_mod.use_replace = True
-    wireframe_mod.use_boundary = True
-    wireframe_mod.use_even_offset = True
+    # Use SOLIDIFY instead of wireframe for better fire emission
+    solidify_mod = emitter.modifiers.new(name="Solidify", type='SOLIDIFY')
+    solidify_mod.thickness = 0.15  # Give some thickness for fire emission
+    solidify_mod.offset = 0  # Centered
 
-    # Apply wireframe
+    # Apply solidify
     bpy.ops.object.convert(target='MESH')
 
     # DEBUG: Check emitter position and parent
@@ -485,14 +474,14 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
     except AttributeError:
         pass  # temperature not available
 
-    # Animate fire fade - fire FROM START, extinguishes at fire_end_frame
+    # Animate fire fade - fire FROM START, QUICK extinguish
     try:
         flow.density = 1.0
         emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=1)
         flow.density = 1.0
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame - 10)
-        flow.density = 0.0
         emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame)
+        flow.density = 0.0
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame + 20)
     except (AttributeError, TypeError):
         # Keyframing might not work, try simple approach
         pass
