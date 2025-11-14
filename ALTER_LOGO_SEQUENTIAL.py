@@ -464,6 +464,13 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
     flow.flow_type = 'FIRE'
     flow.flow_behavior = 'INFLOW'
 
+    # CRITICAL: Set flow source to GEOMETRY for proper emission
+    try:
+        flow.flow_source = 'GEOMETRY'
+        flow.surface_distance = 0.1
+    except AttributeError:
+        pass
+
     try:
         flow.fuel_amount = 2.0
     except AttributeError:
@@ -486,9 +493,9 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
         # Keyframing might not work, try simple approach
         pass
 
-    # Hide emitter
+    # Hide emitter (AFTER setting up flow!)
     emitter.hide_render = True
-    emitter.hide_viewport = True
+    emitter.hide_viewport = False  # Keep visible in viewport to see if fire works!
 
     print(f"  ✓ Fire emitter {index:02d} (active frames 1-{fire_end_frame}, extinguishes {fire_end_frame}-{total_frames})")
 
@@ -499,12 +506,17 @@ def setup_camera_and_lights():
     """Setup camera and lighting"""
     print("\nSetting up camera and lights...")
 
-    # Camera - looking at scene from negative Y
-    bpy.ops.object.camera_add(location=(0, -10, 1))
+    # Camera - looking at scene from negative Y, CLOSER to make logo 2/3 screen
+    bpy.ops.object.camera_add(location=(0, -6, 1))
     camera = bpy.context.active_object
     camera.name = "Camera"
     camera.rotation_euler = (math.radians(90), 0, 0)
     bpy.context.scene.camera = camera
+
+    # Set clip end to NOT see starting position (elements start at Y=20)
+    camera.data.clip_end = 12  # Only see up to Y=12, elements start at Y=20
+
+    print(f"  Camera at (0, -6, 1), clip_end={camera.data.clip_end}")
 
     # Key light
     bpy.ops.object.light_add(type='AREA', location=(5, -8, 6))
@@ -551,6 +563,15 @@ def setup_render_settings(total_frames):
     # CRITICAL: Enable film transparent for alpha channel
     scene.render.film_transparent = True
     print("  ✓ Film transparent enabled (alpha channel)")
+
+    # CRITICAL: Volume settings for better fire visibility
+    try:
+        scene.cycles.volume_step_rate = 0.5  # Lower = finer steps = more visible fire
+        scene.cycles.volume_bounces = 2  # More bounces for better volume
+        scene.cycles.volume_max_steps = 256  # More steps for better quality
+        print("  ✓ Cycles volume settings: step_rate=0.5, bounces=2, max_steps=256")
+    except:
+        pass
 
     # Output format
     blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else os.getcwd()
