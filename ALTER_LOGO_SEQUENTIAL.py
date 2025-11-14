@@ -427,35 +427,42 @@ def create_fire_domain(total_frames, fire_end_frame, elements):
     return domain
 
 
-def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames):
+def create_fire_emitter_unified(elements, fire_end_frame, total_frames):
     """
-    Create FLUID fire emitter for element
-    Fire active FROM START, extinguishes at fire_end_frame, disperses until total_frames
+    Create ONE unified fire emitter from ALL elements
+    EXACTLY like ALTER_LOGO_COMPLETE.py - ONE emitter only!
     """
-    # Duplicate element for emitter
+    print("\nCreating unified fire emitter from all elements...")
+
+    # Select all elements and duplicate them
     bpy.ops.object.select_all(action='DESELECT')
-    element.select_set(True)
-    bpy.context.view_layer.objects.active = element
+    for elem in elements:
+        elem.select_set(True)
+    bpy.context.view_layer.objects.active = elements[0]
+
+    # Duplicate all selected
     bpy.ops.object.duplicate()
 
+    # Join all duplicates into ONE object
+    bpy.ops.object.join()
+
     emitter = bpy.context.active_object
-    emitter.name = f"FireEmitter_{index:02d}"
+    emitter.name = "FireEmitterUnified"
 
-    # Use SOLIDIFY instead of wireframe for better fire emission
-    solidify_mod = emitter.modifiers.new(name="Solidify", type='SOLIDIFY')
-    solidify_mod.thickness = 0.15  # Give some thickness for fire emission
-    solidify_mod.offset = 0  # Centered
+    print(f"  Unified emitter created from {len(elements)} elements")
 
-    # Apply solidify
+    # Add Wireframe modifier (EXACT same as COMPLETE version)
+    wireframe_mod = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
+    wireframe_mod.thickness = 0.08  # Thin wireframe
+    wireframe_mod.use_replace = True
+    wireframe_mod.use_boundary = True
+    wireframe_mod.use_even_offset = True
+
+    # Apply wireframe
     bpy.ops.object.convert(target='MESH')
 
-    # DEBUG: Check emitter position and parent
-    print(f"    Emitter {index:02d} pos: ({emitter.location.x:.2f}, {emitter.location.y:.2f}, {emitter.location.z:.2f})")
-    print(f"    Element {index:02d} pos: ({element.location.x:.2f}, {element.location.y:.2f}, {element.location.z:.2f})")
-
-    # Parent to element
-    emitter.parent = element
-    emitter.matrix_parent_inverse = element.matrix_world.inverted()
+    # NO PARENT - emitter stays at origin, elements move through it
+    # This is different from COMPLETE where logo moves
 
     # Add FLUID flow
     bpy.ops.object.modifier_add(type='FLUID')
@@ -464,40 +471,33 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
     flow.flow_type = 'FIRE'
     flow.flow_behavior = 'INFLOW'
 
-    # CRITICAL: Set flow source to GEOMETRY for proper emission
     try:
-        flow.flow_source = 'GEOMETRY'
-        flow.surface_distance = 0.1
+        flow.fuel_amount = 2.0
     except AttributeError:
         pass
 
     try:
-        flow.fuel_amount = 2.0
-    except AttributeError:
-        pass  # fuel_amount not available
-
-    try:
         flow.temperature = 3.0
     except AttributeError:
-        pass  # temperature not available
+        pass
 
-    # Animate fire fade - fire FROM START, QUICK extinguish
+    # Animate fire - EXACT same as COMPLETE
     try:
         flow.density = 1.0
         emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=1)
         flow.density = 1.0
         emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame)
         flow.density = 0.0
-        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame + 20)
+        emitter.modifiers["Fluid"].flow_settings.keyframe_insert(data_path="density", frame=fire_end_frame + 30)
     except (AttributeError, TypeError):
-        # Keyframing might not work, try simple approach
         pass
 
-    # Hide emitter (AFTER setting up flow!)
+    # Hide emitter
     emitter.hide_render = True
-    emitter.hide_viewport = False  # Keep visible in viewport to see if fire works!
+    emitter.hide_viewport = True
+    emitter.display_type = 'WIRE'
 
-    print(f"  ✓ Fire emitter {index:02d} (active frames 1-{fire_end_frame}, extinguishes {fire_end_frame}-{total_frames})")
+    print(f"  ✓ Unified fire emitter created")
 
     return emitter
 
@@ -703,10 +703,8 @@ def main():
     # Pass elements so domain can be sized and positioned correctly
     domain = create_fire_domain(total_frames, fire_end_frame, elements)
 
-    # Create fire emitters for each element
-    print("\nCreating FLUID fire emitters...")
-    for i, elem in enumerate(elements):
-        create_fire_emitter_for_element(elem, i, fire_end_frame, total_frames)
+    # Create ONE unified fire emitter (SAME as ALTER_LOGO_COMPLETE.py)
+    emitter = create_fire_emitter_unified(elements, fire_end_frame, total_frames)
 
     # Setup camera and lights
     setup_camera_and_lights()
