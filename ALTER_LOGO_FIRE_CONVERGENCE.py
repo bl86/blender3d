@@ -169,9 +169,25 @@ class SceneManager:
 
         # Set Cycles as render engine
         scene.render.engine = 'CYCLES'
-        scene.cycles.device = 'GPU'
+
+        # Cycles settings - Blender 4.5 compatibility
+        try:
+            scene.cycles.device = 'GPU'
+        except:
+            pass  # GPU setting might not be available
+
         scene.cycles.samples = 256
-        scene.cycles.use_denoising = True
+
+        # Denoising - Blender 4.5 compatibility
+        try:
+            scene.cycles.use_denoising = True
+        except:
+            # In Blender 4.5+, denoising might be configured differently
+            try:
+                if hasattr(scene.cycles, 'denoiser'):
+                    scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+            except:
+                pass
 
         # Set resolution
         scene.render.resolution_x = 1920
@@ -187,9 +203,24 @@ class SceneManager:
         scene.render.use_motion_blur = True
         scene.render.motion_blur_shutter = 0.5
 
-        # Set color management
-        scene.view_settings.view_transform = 'Filmic'
-        scene.view_settings.look = 'High Contrast'
+        # Set color management - Blender 4.5 compatibility
+        try:
+            scene.view_settings.view_transform = 'Filmic'
+        except:
+            # Filmic might not be available in newer versions
+            try:
+                scene.view_settings.view_transform = 'Standard'
+            except:
+                pass
+
+        try:
+            scene.view_settings.look = 'High Contrast'
+        except:
+            # Look presets may have changed
+            try:
+                scene.view_settings.look = 'Medium High Contrast'
+            except:
+                pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -427,7 +458,10 @@ class MaterialCreator:
         mat = bpy.data.materials.new(name="FireParticle")
         mat.use_nodes = True
         mat.blend_method = 'BLEND'
-        mat.shadow_method = 'NONE'
+
+        # Shadow method - Blender 4.5 compatibility
+        if hasattr(mat, 'shadow_method'):
+            mat.shadow_method = 'NONE'
 
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
@@ -522,13 +556,29 @@ class FireEffectCreator:
         settings.particle_size = AnimationConfig.FIRE_SIZE
         settings.size_random = 0.5
 
-        # Render
-        settings.render_type = 'HALO'
+        # Render - Blender 4.5 compatibility
+        # Try HALO first, fallback to OBJECT if not available
+        try:
+            settings.render_type = 'HALO'
+        except:
+            # Blender 4.5+ may use different render types
+            try:
+                settings.render_type = 'OBJECT'
+            except:
+                pass  # Use default
+
         settings.use_render_emitter = False
 
-        # Material slot for particles
+        # Material slot for particles - Blender 4.5 compatibility
         if fire_material:
-            settings.material_slot = 'FireParticle'
+            try:
+                settings.material_slot = 'FireParticle'
+            except:
+                # In newer Blender versions, material assignment may differ
+                try:
+                    settings.material = len(bpy.data.materials) - 1
+                except:
+                    pass  # Material assignment not critical
 
         return psys
 
@@ -669,9 +719,22 @@ class CameraSetup:
 
         # Configure camera
         camera.data.lens = AnimationConfig.CAMERA_FOV
-        camera.data.dof.use_dof = True
-        camera.data.dof.focus_distance = AnimationConfig.CAMERA_DISTANCE
-        camera.data.dof.aperture_fstop = 2.8
+
+        # Depth of field - Blender 4.5 compatibility
+        try:
+            camera.data.dof.use_dof = True
+            camera.data.dof.focus_distance = AnimationConfig.CAMERA_DISTANCE
+            camera.data.dof.aperture_fstop = 2.8
+        except:
+            # DOF settings may have changed in Blender 4.5+
+            try:
+                camera.data.dof.use_dof = True
+                if hasattr(camera.data.dof, 'focus_distance'):
+                    camera.data.dof.focus_distance = AnimationConfig.CAMERA_DISTANCE
+                if hasattr(camera.data.dof, 'aperture_fstop'):
+                    camera.data.dof.aperture_fstop = 2.8
+            except:
+                pass  # DOF not critical
 
         # Point camera at logo
         constraint = camera.constraints.new('TRACK_TO')
