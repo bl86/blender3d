@@ -84,9 +84,9 @@ def import_and_prepare_svg(svg_path):
     logo = bpy.context.active_object
     logo.name = "AlterLogoUnified"
 
-    # CRITICAL: NO BEVEL - only MUCH BIGGER extrude for fire wireframe
-    print("  Setting geometry: NO bevel, MUCH BIGGER extrude for wireframe")
-    logo.data.extrude = 0.05  # MUCH BIGGER extrude (was 0.02) - wireframe MUST have geometry!
+    # CRITICAL: NO BEVEL - small extrude for clean appearance
+    print("  Setting geometry: NO bevel, small extrude")
+    logo.data.extrude = 0.005  # Small extrude for clean logo
     logo.data.bevel_depth = 0.0  # NO BEVEL
     logo.data.bevel_resolution = 0
 
@@ -163,8 +163,8 @@ def create_banja_luka_text():
     text_obj.data.align_y = 'CENTER'
     text_obj.data.size = 0.5
 
-    # Same geometry rules: MUCH BIGGER extrude for wireframe, NO bevel
-    text_obj.data.extrude = 0.05  # MUCH BIGGER (was 0.02) - wireframe MUST have geometry!
+    # Same geometry rules: small extrude, NO bevel
+    text_obj.data.extrude = 0.005  # Small extrude for clean appearance
     text_obj.data.bevel_depth = 0.0
 
     # Convert to mesh
@@ -453,7 +453,7 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
 
     # Add wireframe modifier
     wireframe_mod = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
-    wireframe_mod.thickness = 0.20  # INCREASED (was 0.10) for better fire coverage
+    wireframe_mod.thickness = 0.08  # Thin wireframe (same as working version)
     wireframe_mod.use_replace = True
     wireframe_mod.use_boundary = True
     wireframe_mod.use_even_offset = True
