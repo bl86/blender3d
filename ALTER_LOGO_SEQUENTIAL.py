@@ -221,24 +221,36 @@ def create_logo_material():
 
 def animate_elements_sequential(elements, total_duration=240):
     """
-    Animate ALL elements TOGETHER TOWARD camera
-    ALL elements start TOGETHER and arrive TOGETHER at frame 200
+    Animate elements SEQUENTIALLY TOWARD camera
+    Each element comes INDIVIDUALLY, ALL arrive by frame 200
     Fire FROM START, extinguishes in LAST 2 SECONDS
-
-    NO SEQUENTIAL - ALL TOGETHER!
 
     Returns: (total_frames, fire_end_frame, element_timings)
     """
-    print("\nAnimating ALL elements TOGETHER toward camera...")
+    print("\nAnimating elements SEQUENTIALLY toward camera...")
 
-    # ALL elements arrive TOGETHER at frame 200
-    start_frame = 1  # All start together
-    end_frame = 200   # All arrive together at frame 200
     num_elements = len(elements)
 
+    # Each element takes 30 frames (1 second) to travel
+    frames_per_element = 30
+
+    # All elements must arrive by frame 200
+    last_element_arrival = 200
+    first_element_start = 1
+
+    # Calculate gap between element starts so last element arrives at frame 200
+    if num_elements == 1:
+        gap_between_elements = 0
+    else:
+        last_element_start = last_element_arrival - frames_per_element
+        gap_between_elements = (last_element_start - first_element_start) / (num_elements - 1)
+
     print(f"  Number of elements: {num_elements}")
-    print(f"  ALL elements move TOGETHER: frame {start_frame} → {end_frame}")
-    print(f"  ALL elements arrive TOGETHER at frame {end_frame}")
+    print(f"  Frames per element: {frames_per_element}")
+    print(f"  Gap between elements: {gap_between_elements:.1f} frames")
+    print(f"  First element: frame {first_element_start} → {first_element_start + frames_per_element}")
+    print(f"  Last element: frame {int(first_element_start + (num_elements-1) * gap_between_elements)} → {last_element_arrival}")
+    print(f"  ALL elements arrive by frame {last_element_arrival}")
 
     # Fire FROM START, extinguishes in last 2 seconds
     fire_extinguish_duration = 60  # Last 2 seconds at 30fps
@@ -258,7 +270,9 @@ def animate_elements_sequential(elements, total_duration=240):
         current_z = element.location.z
         final_y = element.location.y  # Where it should end up
 
-        # ALL elements use SAME timing - move together!
+        # Calculate timing for THIS element (sequential)
+        start_frame = first_element_start + int(i * gap_between_elements)
+        end_frame = start_frame + frames_per_element
         element_timings.append((start_frame, end_frame))
 
         # START: Far from camera (positive Y)
