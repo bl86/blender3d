@@ -84,9 +84,9 @@ def import_and_prepare_svg(svg_path):
     logo = bpy.context.active_object
     logo.name = "AlterLogoUnified"
 
-    # CRITICAL: NO BEVEL - only BIGGER extrude for fire wireframe
-    print("  Setting geometry: NO bevel, BIGGER extrude for wireframe")
-    logo.data.extrude = 0.02  # BIGGER extrude (was 0.005) - wireframe needs geometry!
+    # CRITICAL: NO BEVEL - only MUCH BIGGER extrude for fire wireframe
+    print("  Setting geometry: NO bevel, MUCH BIGGER extrude for wireframe")
+    logo.data.extrude = 0.05  # MUCH BIGGER extrude (was 0.02) - wireframe MUST have geometry!
     logo.data.bevel_depth = 0.0  # NO BEVEL
     logo.data.bevel_resolution = 0
 
@@ -163,8 +163,8 @@ def create_banja_luka_text():
     text_obj.data.align_y = 'CENTER'
     text_obj.data.size = 0.5
 
-    # Same geometry rules: BIGGER extrude for wireframe, NO bevel
-    text_obj.data.extrude = 0.02  # BIGGER (was 0.005) - wireframe needs geometry!
+    # Same geometry rules: MUCH BIGGER extrude for wireframe, NO bevel
+    text_obj.data.extrude = 0.05  # MUCH BIGGER (was 0.02) - wireframe MUST have geometry!
     text_obj.data.bevel_depth = 0.0
 
     # Convert to mesh
@@ -221,18 +221,24 @@ def create_logo_material():
 
 def animate_elements_sequential(elements, total_duration=240):
     """
-    Animate elements sequentially TOWARD camera
-    Elements start FAR (positive Y) and move NEAR (negative Y)
+    Animate ALL elements TOGETHER TOWARD camera
+    ALL elements start TOGETHER and arrive TOGETHER at frame 200
     Fire FROM START, extinguishes in LAST 2 SECONDS
 
-    EXTENDED: 240 frames total, elements arrive by frame 180-200
+    NO SEQUENTIAL - ALL TOGETHER!
 
     Returns: (total_frames, fire_end_frame, element_timings)
     """
-    print("\nAnimating elements TOWARD camera...")
+    print("\nAnimating ALL elements TOGETHER toward camera...")
 
-    frames_per_element = 40  # EXTENDED: Each element takes 40 frames (was 20)
-    gap_between_elements = 20  # EXTENDED: Larger gap between elements (was 8)
+    # ALL elements arrive TOGETHER at frame 200
+    start_frame = 1  # All start together
+    end_frame = 200   # All arrive together at frame 200
+    num_elements = len(elements)
+
+    print(f"  Number of elements: {num_elements}")
+    print(f"  ALL elements move TOGETHER: frame {start_frame} → {end_frame}")
+    print(f"  ALL elements arrive TOGETHER at frame {end_frame}")
 
     # Fire FROM START, extinguishes in last 2 seconds
     fire_extinguish_duration = 60  # Last 2 seconds at 30fps
@@ -252,9 +258,7 @@ def animate_elements_sequential(elements, total_duration=240):
         current_z = element.location.z
         final_y = element.location.y  # Where it should end up
 
-        # Animation timing
-        start_frame = 1 + (i * gap_between_elements)
-        end_frame = start_frame + frames_per_element
+        # ALL elements use SAME timing - move together!
         element_timings.append((start_frame, end_frame))
 
         # START: Far from camera (positive Y)
