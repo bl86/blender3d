@@ -84,9 +84,9 @@ def import_and_prepare_svg(svg_path):
     logo = bpy.context.active_object
     logo.name = "AlterLogoUnified"
 
-    # CRITICAL: NO BEVEL - only small extrude
-    print("  Setting geometry: NO bevel, small extrude only")
-    logo.data.extrude = 0.005  # Small extrude for 3D effect
+    # CRITICAL: NO BEVEL - only BIGGER extrude for fire wireframe
+    print("  Setting geometry: NO bevel, BIGGER extrude for wireframe")
+    logo.data.extrude = 0.02  # BIGGER extrude (was 0.005) - wireframe needs geometry!
     logo.data.bevel_depth = 0.0  # NO BEVEL
     logo.data.bevel_resolution = 0
 
@@ -163,8 +163,8 @@ def create_banja_luka_text():
     text_obj.data.align_y = 'CENTER'
     text_obj.data.size = 0.5
 
-    # Same geometry rules: small extrude, NO bevel
-    text_obj.data.extrude = 0.005
+    # Same geometry rules: BIGGER extrude for wireframe, NO bevel
+    text_obj.data.extrude = 0.02  # BIGGER (was 0.005) - wireframe needs geometry!
     text_obj.data.bevel_depth = 0.0
 
     # Convert to mesh
@@ -219,25 +219,25 @@ def create_logo_material():
     return mat
 
 
-def animate_elements_sequential(elements, total_duration=120):
+def animate_elements_sequential(elements, total_duration=240):
     """
     Animate elements sequentially TOWARD camera
     Elements start FAR (positive Y) and move NEAR (negative Y)
     Fire FROM START, extinguishes in LAST 2 SECONDS
 
-    SHORTENED for faster playback
+    EXTENDED: 240 frames total, elements arrive by frame 180-200
 
     Returns: (total_frames, fire_end_frame, element_timings)
     """
     print("\nAnimating elements TOWARD camera...")
 
-    frames_per_element = 20  # SHORTENED: Each element takes 20 frames (was 30)
-    gap_between_elements = 8  # SHORTENED: Smaller gap (was 15)
+    frames_per_element = 40  # EXTENDED: Each element takes 40 frames (was 20)
+    gap_between_elements = 20  # EXTENDED: Larger gap between elements (was 8)
 
     # Fire FROM START, extinguishes in last 2 seconds
     fire_extinguish_duration = 60  # Last 2 seconds at 30fps
     total_frames = total_duration
-    fire_end_frame = total_frames - fire_extinguish_duration  # Fire stops at frame 60
+    fire_end_frame = total_frames - fire_extinguish_duration  # Fire stops at frame 180
     fire_start_frame = 1  # Fire starts from beginning
 
     print(f"  Total animation: {total_frames} frames ({total_frames/30:.1f} seconds)")
@@ -292,15 +292,40 @@ def animate_elements_sequential(elements, total_duration=120):
     return total_frames, fire_end_frame, element_timings
 
 
-def create_fire_domain(total_frames, fire_end_frame):
+def create_fire_domain(total_frames, fire_end_frame, elements):
     """
     Create FLUID fire domain
     Fire FROM START, extinguishes at fire_end_frame, disperses until total_frames
+    Domain sized and positioned to cover ALL elements
     """
     print("\nCreating FLUID fire domain...")
 
+    # Calculate bounding box of ALL elements
+    min_x = min(elem.location.x for elem in elements)
+    max_x = max(elem.location.x for elem in elements)
+    min_z = min(elem.location.z for elem in elements)
+    max_z = max(elem.location.z for elem in elements)
+
+    # Y range includes animation path (elements move from 20 to ~0)
+    min_y = -5  # Elements end around 0, give margin
+    max_y = 25  # Elements start at 20, give margin
+
+    # Calculate domain center and size
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
+    center_z = (min_z + max_z) / 2
+
+    size_x = (max_x - min_x) + 5  # Add margin
+    size_y = (max_y - min_y) + 5  # Add margin
+    size_z = (max_z - min_z) + 5  # Add margin
+    domain_size = max(size_x, size_y, size_z)  # Use largest dimension
+
+    print(f"  Element bounds: X[{min_x:.2f}, {max_x:.2f}], Y[{min_y:.2f}, {max_y:.2f}], Z[{min_z:.2f}, {max_z:.2f}]")
+    print(f"  Domain center: ({center_x:.2f}, {center_y:.2f}, {center_z:.2f})")
+    print(f"  Domain size: {domain_size:.2f}")
+
     # Domain covering animation path
-    bpy.ops.mesh.primitive_cube_add(size=25, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_cube_add(size=domain_size, location=(center_x, center_y, center_z))
     domain = bpy.context.active_object
     domain.name = "FireDomain"
     domain.display_type = 'WIRE'
@@ -410,13 +435,17 @@ def create_fire_emitter_for_element(element, index, fire_end_frame, total_frames
 
     # Add wireframe modifier
     wireframe_mod = emitter.modifiers.new(name="Wireframe", type='WIREFRAME')
-    wireframe_mod.thickness = 0.10
+    wireframe_mod.thickness = 0.20  # INCREASED (was 0.10) for better fire coverage
     wireframe_mod.use_replace = True
     wireframe_mod.use_boundary = True
     wireframe_mod.use_even_offset = True
 
     # Apply wireframe
     bpy.ops.object.convert(target='MESH')
+
+    # DEBUG: Check emitter position and parent
+    print(f"    Emitter {index:02d} pos: ({emitter.location.x:.2f}, {emitter.location.y:.2f}, {emitter.location.z:.2f})")
+    print(f"    Element {index:02d} pos: ({element.location.x:.2f}, {element.location.y:.2f}, {element.location.z:.2f})")
 
     # Parent to element
     emitter.parent = element
@@ -649,7 +678,8 @@ def main():
     total_frames, fire_end_frame, element_timings = animate_elements_sequential(elements)
 
     # Create fire domain (fire FROM START, extinguishes at fire_end_frame)
-    domain = create_fire_domain(total_frames, fire_end_frame)
+    # Pass elements so domain can be sized and positioned correctly
+    domain = create_fire_domain(total_frames, fire_end_frame, elements)
 
     # Create fire emitters for each element
     print("\nCreating FLUID fire emitters...")
@@ -690,16 +720,23 @@ def main():
     print("  5. Logo remains GLOWING on transparent background")
     print("  6. Render: Animation > Render Animation")
     print("  7. Output will have transparent background (alpha channel)")
-    print("\n💡 OPTIMIZATIONS FOR SPEED:")
-    print("  • Animation: SHORTENED to 120 frames (4 seconds)")
+    print("\n💡 SETTINGS:")
+    print("  • Animation: EXTENDED to 240 frames (8 seconds)")
+    print("  • Elements: Arrive by frame 180-200")
+    print("  • Extrude: 0.02 (bigger for wireframe geometry)")
+    print("  • Wireframe thickness: 0.20 (thick for fire coverage)")
     print("  • Resolution: 128 (faster baking)")
-    print("  • Adaptive domain: Enabled (optimizes size)")
+    print("  • Adaptive domain: Enabled (auto-sized to elements)")
     print("  • Noise: Disabled (much faster)")
     print("  • Cache type: MODULAR (automatic baking)")
     print("\n💡 VIEWPORT:")
     print("  • Automatically set to CAMERA VIEW")
     print("  • RENDERED mode enabled")
     print("  • Fire should be VISIBLE when baked")
+    print("\n💡 DEBUG INFO:")
+    print("  • Element positions printed during setup")
+    print("  • Fire domain bounds calculated from elements")
+    print("  • Emitter positions printed for verification")
     print("\n" + "="*70 + "\n")
 
     return True
